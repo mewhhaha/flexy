@@ -14,6 +14,7 @@ module Flexy
   , PositionType(..)
   , BoxSizing(..)
   , Overflow(..)
+  , Display(..)
   , WritingMode(..)
   , Direction(..)
   , MeasureFunc
@@ -50,6 +51,7 @@ module Flexy
   , setAspectRatio
   , setBoxSizing
   , setOverflow
+  , setDisplay
   , setWritingMode
   , setFlex
   , setFlexFlow
@@ -94,6 +96,7 @@ import Flexy.Style
   , setAspectRatio
   , setBoxSizing
   , setOverflow
+  , setDisplay
   , setWritingMode
   , setFlex
   , setFlexFlow
@@ -119,6 +122,7 @@ import Flexy.Types
   , PositionType(..)
   , BoxSizing(..)
   , Overflow(..)
+  , Display(..)
   , WritingMode(..)
   , Direction(..)
   )

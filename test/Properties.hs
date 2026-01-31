@@ -7,7 +7,9 @@ import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.QuickCheck as QC
 
 import Flexy
-import Flexy.Measure (MeasureOutput(..))
+import qualified Flexy.Layout as L
+import Flexy.Measure (MeasureInput(..), MeasureMode(..), MeasureOutput(..))
+import Flexy.Types (EdgeValues(..))
 
 propertyTests :: TestTree
 propertyTests = testGroup "flexy-properties"
@@ -27,6 +29,14 @@ propertyTests = testGroup "flexy-properties"
   , QC.testProperty "auto_margins_cross_axis_center" propAutoMarginsCrossAxisCenter
   , QC.testProperty "flex_basis_percent_resolves" propFlexBasisPercent
   , QC.testProperty "justify_space_evenly_positions" propJustifySpaceEvenlyPositions
+  , QC.testProperty "direction_inheritance_border_rtl" propDirectionInheritanceBorderRtl
+  , QC.testProperty "writing_mode_start_end_vertical" propWritingModeStartEndVertical
+  , QC.testProperty "absolute_auto_size_measure" propAbsoluteAutoSizeMeasure
+  , QC.testProperty "percent_margin_uses_width" propPercentMarginUsesWidth
+  , QC.testProperty "baseline_line_contains_tall" propBaselineLineContainsTall
+  , QC.testProperty "explicit_zero_border_override" propExplicitZeroBorderOverride
+  , QC.testProperty "random_tree_finite" propRandomTreeFinite
+  , QC.testProperty "random_tree_non_negative" propRandomTreeNonNegative
   ]
 
 propFlexGrow :: Property
@@ -359,6 +369,354 @@ propJustifySpaceEvenlyPositions = forAll gen $ \(cw, w) ->
       extra <- chooseFloat (10, 120)
       let cw = 3 * w + extra
       pure (cw, w)
+
+propDirectionInheritanceBorderRtl :: Property
+propDirectionInheritanceBorderRtl = forAll gen $ \(startV, endV) ->
+  let childStyle = defaultStyle
+        & setBorderStartEnd startV endV
+        & setSize (DimPoints 20) (DimPoints 10)
+      child = node childStyle
+      rootStyle = defaultStyle
+        & setDirection RTL
+        & setFlexDirection Row
+      root = withChildren [child] (node rootStyle)
+      layoutRoot = computeLayout defaultConfig (Size (DimPoints 100) (DimPoints 20)) root
+  in expectChildren1 layoutRoot $ \l1 ->
+      let b = layoutBorder l1
+      in approxEq (leftE b) endV .&&. approxEq (rightE b) startV
+  where
+    gen = do
+      startV <- chooseFloat (0, 15)
+      endV <- chooseFloat (0, 15)
+      pure (startV, endV)
+
+propWritingModeStartEndVertical :: Property
+propWritingModeStartEndVertical = forAll gen $ \(startV, endV) ->
+  let childStyle = defaultStyle
+        & setWritingMode VerticalRL
+        & setBorderStartEnd startV endV
+        & setSize (DimPoints 20) (DimPoints 20)
+      child = node childStyle
+      rootStyle = defaultStyle & setFlexDirection Row
+      root = withChildren [child] (node rootStyle)
+      layoutRoot = computeLayout defaultConfig (Size (DimPoints 100) (DimPoints 40)) root
+  in expectChildren1 layoutRoot $ \l1 ->
+      let b = layoutBorder l1
+      in approxEq (topE b) startV .&&. approxEq (bottomE b) endV
+  where
+    gen = do
+      startV <- chooseFloat (0, 15)
+      endV <- chooseFloat (0, 15)
+      pure (startV, endV)
+
+propAbsoluteAutoSizeMeasure :: Property
+propAbsoluteAutoSizeMeasure = forAll gen $ \(w, h) ->
+  let measureFn _ = MeasureOutput w h Nothing
+      absStyle = defaultStyle
+        & setPositionType PositionAbsolute
+        & setPositionLTRB (ValPoints 0) (ValPoints 0) ValAuto ValAuto
+      absNode = withMeasure measureFn (node absStyle)
+      rootStyle = defaultStyle & setFlexDirection Row
+      root = withChildren [absNode] (node rootStyle)
+      layoutRoot = computeLayout defaultConfig (Size (DimPoints 200) (DimPoints 200)) root
+  in expectChildren1 layoutRoot $ \l1 ->
+      let (_, _, w1, h1) = layoutBounds l1
+      in approxEq w1 w .&&. approxEq h1 h
+  where
+    gen = do
+      w <- chooseFloat (5, 120)
+      h <- chooseFloat (5, 120)
+      pure (w, h)
+
+propPercentMarginUsesWidth :: Property
+propPercentMarginUsesWidth = forAll gen $ \(cw, ch, p) ->
+  let childStyle = defaultStyle
+        & setSize (DimPoints 10) (DimPoints 10)
+        & setMarginLTRB (ValPoints 0) (ValPercent p) (ValPoints 0) (ValPoints 0)
+      rootStyle = defaultStyle
+        & setFlexDirection Row
+        & setAlignItems AlignFlexStart
+      root = withChildren [node childStyle] (node rootStyle)
+      layoutRoot = computeLayout defaultConfig (Size (DimPoints cw) (DimPoints ch)) root
+  in expectChildren1 layoutRoot $ \l1 ->
+      let (_, y1, _, _) = layoutBounds l1
+          expected = cw * p / 100
+      in approxEq y1 expected
+  where
+    gen = do
+      cw <- chooseFloat (60, 300)
+      ch <- chooseFloat (30, 200)
+      p <- chooseFloat (5, 40)
+      pure (cw, ch, p)
+
+propBaselineLineContainsTall :: Property
+propBaselineLineContainsTall = forAll gen $ \(hBase, hTall, base) ->
+  let measureFn _ = MeasureOutput 20 hBase (Just base)
+      c1 = withMeasure measureFn (node defaultStyle)
+      c2 = node (defaultStyle & setSize (DimPoints 20) (DimPoints hTall) & setAlignSelf AlignFlexStart)
+      rootStyle = defaultStyle
+        & setFlexDirection Row
+        & setAlignItems AlignBaseline
+      root = withChildren [c1, c2] (node rootStyle)
+      layoutRoot = computeLayout defaultConfig (Size (DimPoints 100) DimUndefined) root
+      (_, _, _, rh) = layoutBounds layoutRoot
+      expectedMin = max hBase hTall
+  in counterexample ("expected root height >= " ++ show expectedMin ++ ", got " ++ show rh) (rh + 0.01 >= expectedMin)
+  where
+    gen = do
+      hBase <- chooseFloat (10, 40)
+      hTall <- chooseFloat (30, 120)
+      base <- chooseFloat (0, hBase)
+      pure (hBase, hTall, base)
+
+propExplicitZeroBorderOverride :: Property
+propExplicitZeroBorderOverride = forAll gen $ \(allV, endV) ->
+  let rootStyle = defaultStyle
+        & setBorderAll allV
+        & setBorderStartEnd 0 endV
+      root = node rootStyle
+      layoutRoot = computeLayout defaultConfig (Size (DimPoints 50) (DimPoints 30)) root
+      b = layoutBorder layoutRoot
+  in approxEq (leftE b) 0 .&&. approxEq (rightE b) endV
+  where
+    gen = do
+      allV <- chooseFloat (1, 10)
+      endV <- chooseFloat (0, 10)
+      pure (allV, endV)
+
+layoutBorder :: LayoutNode -> EdgeValues Float
+layoutBorder n = L.border (L.layout n)
+
+propRandomTreeFinite :: Property
+propRandomTreeFinite = QC.forAllShow genRootAndTree showRootAndTree $ \(rootSize, tree) ->
+  let layoutRoot = computeLayout defaultConfig rootSize tree
+      values = layoutValues layoutRoot
+  in counterexample "non-finite layout value detected" (all isFinite values)
+
+propRandomTreeNonNegative :: Property
+propRandomTreeNonNegative = QC.forAllShow genRootAndTree showRootAndTree $ \(rootSize, tree) ->
+  let layoutRoot = computeLayout defaultConfig rootSize tree
+      sizes = layoutSizes layoutRoot
+  in counterexample "negative size detected" (all (>= 0) sizes)
+
+showRootAndTree :: (Size, Node) -> String
+showRootAndTree (rootSize, _) = "rootSize=" ++ show rootSize
+
+genRootAndTree :: Gen (Size, Node)
+genRootAndTree = do
+  rootSize <- genRootSize
+  tree <- sized genTreeSized
+  pure (rootSize, tree)
+
+genRootSize :: Gen Size
+genRootSize = do
+  w <- genRootDim
+  h <- genRootDim
+  pure (Size w h)
+
+genRootDim :: Gen Dimension
+genRootDim =
+  frequency
+    [ (7, DimPoints <$> chooseFloat (10, 600))
+    , (3, pure DimUndefined)
+    ]
+
+genTreeSized :: Int -> Gen Node
+genTreeSized n = genNode (max 1 (min 6 (n `div` 2 + 1)))
+
+genNode :: Int -> Gen Node
+genNode depth = do
+  style <- genStyle
+  childCount <- if depth <= 0 then pure 0 else frequency [(2, pure 0), (8, choose (1, 4))]
+  if childCount == 0
+    then genLeaf style
+    else do
+      kids <- vectorOf childCount (genNode (depth - 1))
+      pure (withChildren kids (node style))
+
+genLeaf :: Style -> Gen Node
+genLeaf style = do
+  useMeasure <- frequency [(3, pure True), (7, pure False)]
+  if useMeasure
+    then do
+      mw <- chooseFloat (0, 400)
+      mh <- chooseFloat (0, 400)
+      let measureFn input =
+            let w = case widthMode input of
+                  MeasureExactly -> availableWidth input
+                  MeasureAtMost -> min mw (availableWidth input)
+                  MeasureUndefined -> mw
+                h = case heightMode input of
+                  MeasureExactly -> availableHeight input
+                  MeasureAtMost -> min mh (availableHeight input)
+                  MeasureUndefined -> mh
+                base = min h (mh / 2)
+            in MeasureOutput w h (Just base)
+      pure (withMeasure measureFn (node style))
+    else pure (node style)
+
+genStyle :: Gen Style
+genStyle = do
+  dir <- elements [LTR, RTL, Inherit]
+  wm <- elements [HorizontalTB, VerticalRL, VerticalLR]
+  flexDir <- elements [Row, RowReverse, Column, ColumnReverse]
+  wrap <- elements [NoWrap, Wrap, WrapReverse]
+  justify <- elements [JustifyFlexStart, JustifyCenter, JustifyFlexEnd, JustifySpaceBetween, JustifySpaceAround, JustifySpaceEvenly]
+  alignItems <- elements [AlignFlexStart, AlignCenter, AlignFlexEnd, AlignStretch, AlignBaseline, AlignFirstBaseline, AlignLastBaseline]
+  alignSelf <- elements [AlignAuto, AlignFlexStart, AlignCenter, AlignFlexEnd, AlignStretch, AlignBaseline, AlignFirstBaseline, AlignLastBaseline]
+  alignContent <- elements [AlignFlexStart, AlignCenter, AlignFlexEnd, AlignStretch, AlignSpaceBetween, AlignSpaceAround, AlignSpaceEvenly]
+  posType <- elements [PositionRelative, PositionAbsolute]
+  disp <- frequency [(8, pure DisplayFlex), (1, pure DisplayNone)]
+  order <- choose (-2, 2)
+  grow <- chooseFloat (0, 5)
+  shrinkFactor <- chooseFloat (0, 5)
+  basis <- genDim
+  box <- elements [ContentBox, BorderBox]
+  overflow <- elements [OverflowVisible, OverflowHidden, OverflowScroll, OverflowClip]
+  w <- genDim
+  h <- genDim
+  minW <- genDim
+  minH <- genDim
+  maxW <- genDim
+  maxH <- genDim
+  aspect <- frequency [(4, pure Nothing), (1, Just <$> chooseFloat (0.1, 10.0))]
+  gapRow <- chooseFloat (0, 40)
+  gapCol <- chooseFloat (0, 40)
+  padSetter <- genPaddingSetter
+  marginSetter <- genMarginSetter
+  borderSetter <- genBorderSetter
+  posSetter <- genPositionSetter
+  let s0 = defaultStyle
+      s1 = setDirection dir s0
+      s2 = setWritingMode wm s1
+      s3 = setFlexDirection flexDir s2
+      s4 = setFlexWrap wrap s3
+      s5 = setJustifyContent justify s4
+      s6 = setAlignItems alignItems s5
+      s7 = setAlignSelf alignSelf s6
+      s8 = setAlignContent alignContent s7
+      s9 = setPositionType posType s8
+      s10 = setOrder order s9
+      s11 = setFlexGrow grow s10
+      s12 = setFlexShrink shrinkFactor s11
+      s13 = setFlexBasis basis s12
+      s14 = setBoxSizing box s13
+      s15 = setOverflow overflow s14
+      s16 = setDisplay disp s15
+      s17 = setWidth w s16
+      s18 = setHeight h s17
+      s19 = setMinWidth minW s18
+      s20 = setMinHeight minH s19
+      s21 = setMaxWidth maxW s20
+      s22 = setMaxHeight maxH s21
+      s23 = setAspectRatio aspect s22
+      s24 = setGaps gapRow gapCol s23
+      s25 = padSetter s24
+      s26 = marginSetter s25
+      s27 = borderSetter s26
+      s28 = posSetter s27
+  pure s28
+
+genDim :: Gen Dimension
+genDim =
+  frequency
+    [ (4, pure DimAuto)
+    , (2, pure DimUndefined)
+    , (7, DimPoints <$> chooseFloat (0, 400))
+    , (4, DimPercent <$> chooseFloat (0, 200))
+    , (1, pure DimMinContent)
+    , (1, pure DimMaxContent)
+    , (1, pure DimContent)
+    , (1, pure (DimFitContent Nothing))
+    , (1, DimFitContent . Just <$> chooseFloat (20, 400))
+    ]
+
+genValueSigned :: Gen Value
+genValueSigned =
+  frequency
+    [ (2, pure ValAuto)
+    , (6, ValPoints <$> chooseFloat (-50, 80))
+    , (3, ValPercent <$> chooseFloat (-50, 80))
+    ]
+
+genValueNonNegative :: Gen Value
+genValueNonNegative =
+  frequency
+    [ (2, pure ValAuto)
+    , (7, ValPoints <$> chooseFloat (0, 40))
+    , (3, ValPercent <$> chooseFloat (0, 60))
+    ]
+
+genPaddingSetter :: Gen (Style -> Style)
+genPaddingSetter = do
+  useAll <- elements [True, False]
+  if useAll
+    then do
+      v <- genValueNonNegative
+      pure (setPaddingAll v)
+    else do
+      l <- genValueNonNegative
+      t <- genValueNonNegative
+      r <- genValueNonNegative
+      b <- genValueNonNegative
+      pure (setPaddingLTRB l t r b)
+
+genMarginSetter :: Gen (Style -> Style)
+genMarginSetter = do
+  choice <- elements [0 :: Int, 1, 2]
+  case choice of
+    0 -> do
+      v <- genValueSigned
+      pure (setMarginAll v)
+    1 -> do
+      l <- genValueSigned
+      t <- genValueSigned
+      r <- genValueSigned
+      b <- genValueSigned
+      pure (setMarginLTRB l t r b)
+    _ -> do
+      l <- genValueSigned
+      r <- genValueSigned
+      pure (setMarginLR l r)
+
+genBorderSetter :: Gen (Style -> Style)
+genBorderSetter = do
+  useAll <- elements [True, False]
+  if useAll
+    then do
+      v <- chooseFloat (0, 8)
+      pure (setBorderAll v)
+    else do
+      startV <- chooseFloat (0, 8)
+      endV <- chooseFloat (0, 8)
+      pure (setBorderStartEnd startV endV)
+
+genPositionSetter :: Gen (Style -> Style)
+genPositionSetter = do
+  l <- genValueSigned
+  t <- genValueSigned
+  r <- genValueSigned
+  b <- genValueSigned
+  pure (setPositionLTRB l t r b)
+
+layoutValues :: LayoutNode -> [Float]
+layoutValues n =
+  let l = L.layout n
+      edgeVals ev = [leftE ev, topE ev, rightE ev, bottomE ev, startE ev, endE ev, horizontalE ev, verticalE ev, allE ev]
+      here =
+        [L.left l, L.top l, L.width l, L.height l]
+        ++ edgeVals (L.margin l)
+        ++ edgeVals (L.padding l)
+        ++ edgeVals (L.border l)
+  in here ++ concatMap layoutValues (layoutChildren n)
+
+layoutSizes :: LayoutNode -> [Float]
+layoutSizes n =
+  let l = L.layout n
+  in [L.width l, L.height l] ++ concatMap layoutSizes (layoutChildren n)
+
+isFinite :: Float -> Bool
+isFinite v = not (isNaN v || isInfinite v)
 
 expectChildren1 :: LayoutNode -> (LayoutNode -> Property) -> Property
 expectChildren1 layout f =

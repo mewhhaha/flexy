@@ -23,6 +23,7 @@ module Flexy.Style
   , setAspectRatio
   , setBoxSizing
   , setOverflow
+  , setDisplay
   , setWritingMode
   , setFlex
   , setFlexFlow
@@ -57,6 +58,7 @@ data Style = Style
   , flexBasis :: Dimension -- ^ Flex base size.
   , boxSizing :: BoxSizing -- ^ Content-box or border-box sizing.
   , overflow :: Overflow -- ^ Overflow behavior (affects auto min sizing).
+  , display :: Display -- ^ Display participation in layout.
   , width :: Dimension -- ^ Width dimension.
   , height :: Dimension -- ^ Height dimension.
   , minWidth :: Dimension -- ^ Minimum width dimension.
@@ -91,6 +93,7 @@ defaultStyle =
     , flexBasis = DimAuto
     , boxSizing = ContentBox
     , overflow = OverflowVisible
+    , display = DisplayFlex
     , width = DimAuto
     , height = DimAuto
     , minWidth = DimUndefined
@@ -189,6 +192,10 @@ setBoxSizing bs s = s { boxSizing = bs }
 -- | Set overflow behavior (affects auto min sizing).
 setOverflow :: Overflow -> Style -> Style
 setOverflow ov s = s { overflow = ov }
+
+-- | Set display participation in layout.
+setDisplay :: Display -> Style -> Style
+setDisplay d s = s { display = d }
 
 -- | Set the writing mode for axis resolution.
 setWritingMode :: WritingMode -> Style -> Style

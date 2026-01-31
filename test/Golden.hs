@@ -82,6 +82,7 @@ goldenTests = testGroup "flexy-golden"
   , golden "percent_margin_uses_width" percentMarginUsesWidth
   , golden "writing_mode_start_end" writingModeStartEnd
   , golden "explicit_zero_border_override" explicitZeroBorderOverride
+  , golden "display_none_ignored" displayNoneIgnored
   ]
 
   where
@@ -147,6 +148,7 @@ goldenTests = testGroup "flexy-golden"
         "percent_margin_uses_width" -> Size (DimPoints 200) (DimPoints 100)
         "writing_mode_start_end" -> Size (DimPoints 100) (DimPoints 100)
         "explicit_zero_border_override" -> Size (DimPoints 50) (DimPoints 30)
+        "display_none_ignored" -> Size (DimPoints 100) (DimPoints 20)
         _ -> Size DimUndefined DimUndefined
 
     basicRow =
@@ -784,3 +786,14 @@ goldenTests = testGroup "flexy-golden"
             & setBorderStartEnd 0 5
           root = withKey "root" (node rootStyle)
       in withChildren [child] root
+
+    displayNoneIgnored =
+      let c1Style = defaultStyle
+            & setDisplay DisplayNone
+            & setSize (DimPoints 50) (DimPoints 10)
+          c2Style = defaultStyle & setSize (DimPoints 20) (DimPoints 10)
+          c1 = withKey "c1" (node c1Style)
+          c2 = withKey "c2" (node c2Style)
+          rootStyle = defaultStyle & setFlexDirection Row
+          root = withKey "root" (node rootStyle)
+      in withChildren [c1, c2] root

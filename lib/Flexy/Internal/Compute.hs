@@ -48,53 +48,71 @@ computeLayoutInternal cfg rootSize =
 computeNodeLayout :: LayoutConfig -> Size -> Maybe (Float, Float) -> Direction -> Node -> LayoutNode
 computeNodeLayout cfg ownerSize allocated parentDir n =
   let s = N.style n
-      dir = resolveDirection parentDir s
-      ownerW = dimensionToMaybe (width ownerSize)
-      ownerH = dimensionToMaybe (height ownerSize)
-      widthDim = S.width s
-      heightDim = S.height s
-      widthIntrinsic = intrinsicMode widthDim
-      heightIntrinsic = intrinsicMode heightDim
-      sizeOwnerW = if isJust widthIntrinsic then Nothing else ownerW
-      sizeOwnerH = if isJust heightIntrinsic then Nothing else ownerH
-      allocatedW = fmap fst allocated
-      allocatedH = fmap snd allocated
-      paddingE = resolveEdgesValue (S.padding s) dir (S.writingMode s) ownerW ownerH
-      borderE = resolveEdgesFloat (S.border s) dir (S.writingMode s)
-      marginE = resolveEdgesValue (S.margin s) dir (S.writingMode s) ownerW ownerH
-      padBorderW = edgeLeft paddingE + edgeRight paddingE + edgeLeft borderE + edgeRight borderE
-      padBorderH = edgeTop paddingE + edgeBottom paddingE + edgeTop borderE + edgeBottom borderE
-      widthDef = resolveDimensionWith widthDim ownerW
-      heightDef = resolveDimensionWith heightDim ownerH
-      borderWFromStyle = resolveBorderSize (S.boxSizing s) padBorderW widthDef
-      borderHFromStyle = resolveBorderSize (S.boxSizing s) padBorderH heightDef
-      resolvedBorderW = allocatedW <|> borderWFromStyle <|> sizeOwnerW
-      resolvedBorderH = allocatedH <|> borderHFromStyle <|> sizeOwnerH
-      resolvedContentW = fmap (\w -> max 0 (w - padBorderW)) resolvedBorderW
-      resolvedContentH = fmap (\h -> max 0 (h - padBorderH)) resolvedBorderH
-      borderFixedW = isJust allocatedW || (isNothing allocatedW && isNothing borderWFromStyle && isJust sizeOwnerW)
-      borderFixedH = isJust allocatedH || (isNothing allocatedH && isNothing borderHFromStyle && isJust sizeOwnerH)
-      innerW = resolvedContentW
-      innerH = resolvedContentH
-      (finalW, finalH, childLayouts) =
-        if null (N.children n) && isJust (N.measure n)
-          then layoutLeaf n resolvedBorderW resolvedBorderH innerW innerH ownerW ownerH padBorderW padBorderH borderFixedW borderFixedH
-          else layoutContainer cfg n resolvedBorderW resolvedBorderH ownerW ownerH innerW innerH paddingE borderE dir borderFixedW borderFixedH
-      layout0 = LT.Layout
-        { LT.left = 0
-        , LT.top = 0
-        , LT.width = finalW
-        , LT.height = finalH
-        , LT.margin = marginE
-        , LT.padding = paddingE
-        , LT.border = borderE
-        }
-  in LT.LayoutNode
-      { LT.layout = applyRounding cfg (applyRelativeOffset s dir ownerW ownerH layout0)
-      , LT.nodeStyle = s
-      , LT.nodeKey = N.nodeKey n
-      , LT.children = childLayouts
-      }
+  in if S.display s == DisplayNone
+      then
+        let layout0 = LT.Layout
+              { LT.left = 0
+              , LT.top = 0
+              , LT.width = 0
+              , LT.height = 0
+              , LT.margin = edgeValues 0
+              , LT.padding = edgeValues 0
+              , LT.border = edgeValues 0
+              }
+        in LT.LayoutNode
+            { LT.layout = layout0
+            , LT.nodeStyle = s
+            , LT.nodeKey = N.nodeKey n
+            , LT.children = []
+            }
+      else
+        let dir = resolveDirection parentDir s
+            ownerW = dimensionToMaybe (width ownerSize)
+            ownerH = dimensionToMaybe (height ownerSize)
+            widthDim = S.width s
+            heightDim = S.height s
+            widthIntrinsic = intrinsicMode widthDim
+            heightIntrinsic = intrinsicMode heightDim
+            sizeOwnerW = if isJust widthIntrinsic then Nothing else ownerW
+            sizeOwnerH = if isJust heightIntrinsic then Nothing else ownerH
+            allocatedW = fmap fst allocated
+            allocatedH = fmap snd allocated
+            paddingE = resolveEdgesValue (S.padding s) dir (S.writingMode s) ownerW ownerH
+            borderE = resolveEdgesFloat (S.border s) dir (S.writingMode s)
+            marginE = resolveEdgesValue (S.margin s) dir (S.writingMode s) ownerW ownerH
+            padBorderW = edgeLeft paddingE + edgeRight paddingE + edgeLeft borderE + edgeRight borderE
+            padBorderH = edgeTop paddingE + edgeBottom paddingE + edgeTop borderE + edgeBottom borderE
+            widthDef = resolveDimensionWith widthDim ownerW
+            heightDef = resolveDimensionWith heightDim ownerH
+            borderWFromStyle = resolveBorderSize (S.boxSizing s) padBorderW widthDef
+            borderHFromStyle = resolveBorderSize (S.boxSizing s) padBorderH heightDef
+            resolvedBorderW = allocatedW <|> borderWFromStyle <|> sizeOwnerW
+            resolvedBorderH = allocatedH <|> borderHFromStyle <|> sizeOwnerH
+            resolvedContentW = fmap (\w -> max 0 (w - padBorderW)) resolvedBorderW
+            resolvedContentH = fmap (\h -> max 0 (h - padBorderH)) resolvedBorderH
+            borderFixedW = isJust allocatedW || (isNothing allocatedW && isNothing borderWFromStyle && isJust sizeOwnerW)
+            borderFixedH = isJust allocatedH || (isNothing allocatedH && isNothing borderHFromStyle && isJust sizeOwnerH)
+            innerW = resolvedContentW
+            innerH = resolvedContentH
+            (finalW, finalH, childLayouts) =
+              if null (N.children n) && isJust (N.measure n)
+                then layoutLeaf n resolvedBorderW resolvedBorderH innerW innerH ownerW ownerH padBorderW padBorderH borderFixedW borderFixedH
+                else layoutContainer cfg n resolvedBorderW resolvedBorderH ownerW ownerH innerW innerH paddingE borderE dir borderFixedW borderFixedH
+            layout0 = LT.Layout
+              { LT.left = 0
+              , LT.top = 0
+              , LT.width = finalW
+              , LT.height = finalH
+              , LT.margin = marginE
+              , LT.padding = paddingE
+              , LT.border = borderE
+              }
+        in LT.LayoutNode
+            { LT.layout = applyRounding cfg (applyRelativeOffset s dir ownerW ownerH layout0)
+            , LT.nodeStyle = s
+            , LT.nodeKey = N.nodeKey n
+            , LT.children = childLayouts
+            }
 
 layoutLeaf :: Node -> Maybe Float -> Maybe Float -> Maybe Float -> Maybe Float -> Maybe Float -> Maybe Float -> Float -> Float -> Bool -> Bool -> (Float, Float, [LayoutNode])
 layoutLeaf n resolvedBorderW resolvedBorderH resolvedContentW resolvedContentH ownerW ownerH padBorderW padBorderH borderFixedW borderFixedH =
@@ -134,7 +152,8 @@ layoutContainer cfg n resolvedBorderW resolvedBorderH ownerW ownerH innerW inner
       axisInfo = if S.flexWrap s == WrapReverse
         then axisInfo0 { crossIsReverse = not (crossIsReverse axisInfo0) }
         else axisInfo0
-      indexedChildren = zip [0..] (N.children n)
+      displayedChildren = filter (isDisplayed . N.style) (N.children n)
+      indexedChildren = zip [0..] displayedChildren
       (flexKids, absKids) = partitionChildren indexedChildren
       gapMain = mainGap s axisInfo
       gapCross = crossGap s axisInfo
@@ -222,7 +241,7 @@ layoutContainer cfg n resolvedBorderW resolvedBorderH ownerW ownerH innerW inner
         then []
         else computeStaticPositions cfg axisInfo s dir (Just finalInnerMain) (Just finalInnerCross') gapMain gapCross (S.flexWrap s) indexedChildren
       absLayouts = map (layoutAbsChild cfg ownerSize paddingE borderE innerW innerH dir (lookupStaticPos staticPositions)) absKids
-      orderedChildren = mergeChildren (N.children n) flexLayouts absLayouts
+      orderedChildren = mergeChildren displayedChildren flexLayouts absLayouts
       contentW0 = if mainAxis axisInfo == AxisRow then finalInnerMain else finalInnerCross'
       contentH0 = if mainAxis axisInfo == AxisRow then finalInnerCross' else finalInnerMain
       padBorderW = edgeLeft paddingE + edgeRight paddingE + edgeLeft borderE + edgeRight borderE
@@ -252,6 +271,9 @@ layoutContainer cfg n resolvedBorderW resolvedBorderH ownerW ownerH innerW inner
       finalW = if borderFixedW then fromMaybe borderW resolvedBorderW else borderW
       finalH = if borderFixedH then fromMaybe borderH resolvedBorderH else borderH
   in (finalW, finalH, orderedChildren)
+
+isDisplayed :: Style -> Bool
+isDisplayed s = S.display s /= DisplayNone
 
 -- Axis
 axisFromStyle :: Style -> Direction -> AxisInfo

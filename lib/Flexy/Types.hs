@@ -12,6 +12,7 @@ module Flexy.Types
   , PositionType(..)
   , BoxSizing(..)
   , Overflow(..)
+  , Display(..)
   , WritingMode(..)
   , Direction(..)
   , edgeValues
@@ -145,6 +146,12 @@ data Overflow
   | OverflowHidden -- ^ Auto min sizes may shrink to padding/border.
   | OverflowScroll -- ^ Treated like hidden for min sizing.
   | OverflowClip -- ^ Treated like hidden for min sizing.
+  deriving (Eq, Show)
+
+-- | Display participation in layout.
+data Display
+  = DisplayFlex -- ^ Participate in layout (flex).
+  | DisplayNone -- ^ Do not participate in layout.
   deriving (Eq, Show)
 
 -- | Writing mode used to resolve inline/block axes.
