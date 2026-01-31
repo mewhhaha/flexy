@@ -16,6 +16,15 @@ Flexy targets the core flexbox model and several CSS sizing behaviors. It is not
 
 Breaking changes are acceptable while the API stabilizes.
 
+### Display
+
+Flexy currently supports two display modes:
+
+- `DisplayFlex` (default): the node participates in flex layout.
+- `DisplayNone`: the node is excluded from layout and produces a zero-sized layout node (children are skipped).
+
+Use `setDisplay DisplayNone` to hide a node while keeping it in the tree.
+
 ## Install
 
 Add to your `build-depends` once published:
