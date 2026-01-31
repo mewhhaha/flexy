@@ -24,6 +24,9 @@ propertyTests = testGroup "flexy-properties"
   , QC.testProperty "min_content_container_width" propMinContentContainerWidth
   , QC.testProperty "max_content_container_width" propMaxContentContainerWidth
   , QC.testProperty "baseline_aligns_equal_baseline" propBaselineAlignsEqual
+  , QC.testProperty "auto_margins_cross_axis_center" propAutoMarginsCrossAxisCenter
+  , QC.testProperty "flex_basis_percent_resolves" propFlexBasisPercent
+  , QC.testProperty "justify_space_evenly_positions" propJustifySpaceEvenlyPositions
   ]
 
 propFlexGrow :: Property
@@ -41,13 +44,13 @@ propFlexGrow = forAll gen $ \(cw, g1, g2) ->
       rootStyle = defaultStyle & setFlexDirection Row
       root = withChildren [c1, c2] (node rootStyle)
       layoutRoot = computeLayout defaultConfig (Size (DimPoints cw) (DimPoints 20)) root
-      [l1, l2] = layoutChildren layoutRoot
-      (_, _, w1, _) = layoutBounds l1
-      (_, _, w2, _) = layoutBounds l2
-      total = w1 + w2
-      expected1 = cw * g1 / (g1 + g2)
-      expected2 = cw * g2 / (g1 + g2)
-  in approxEq total cw .&&. approxEq w1 expected1 .&&. approxEq w2 expected2
+  in expectChildren2 layoutRoot $ \l1 l2 ->
+      let (_, _, w1, _) = layoutBounds l1
+          (_, _, w2, _) = layoutBounds l2
+          totalW = w1 + w2
+          expected1 = cw * g1 / (g1 + g2)
+          expected2 = cw * g2 / (g1 + g2)
+      in approxEq totalW cw .&&. approxEq w1 expected1 .&&. approxEq w2 expected2
   where
     gen = do
       cw <- chooseFloat (50, 500)
@@ -61,19 +64,19 @@ propFlexShrink = forAll gen $ \(cw, w1, w2) ->
       c2 = node (defaultStyle & setSize (DimPoints w2) (DimPoints 10))
       root = withChildren [c1, c2] (node defaultStyle)
       layoutRoot = computeLayout defaultConfig (Size (DimPoints cw) (DimPoints 20)) root
-      [l1, l2] = layoutChildren layoutRoot
-      (_, _, lw1, _) = layoutBounds l1
-      (_, _, lw2, _) = layoutBounds l2
-      total = w1 + w2
-      expected1 = w1 * cw / total
-      expected2 = w2 * cw / total
-  in approxEq lw1 expected1 .&&. approxEq lw2 expected2
+  in expectChildren2 layoutRoot $ \l1 l2 ->
+      let (_, _, lw1, _) = layoutBounds l1
+          (_, _, lw2, _) = layoutBounds l2
+          totalW = w1 + w2
+          expected1 = w1 * cw / totalW
+          expected2 = w2 * cw / totalW
+      in approxEq lw1 expected1 .&&. approxEq lw2 expected2
   where
     gen = do
       w1 <- chooseFloat (50, 200)
       w2 <- chooseFloat (50, 200)
-      let total = w1 + w2
-      cw <- chooseFloat (10, total - 1)
+      let totalW = w1 + w2
+      cw <- chooseFloat (10, totalW - 1)
       pure (cw, w1, w2)
 
 propPercentWidth :: Property
@@ -82,10 +85,10 @@ propPercentWidth = forAll gen $ \(cw, p) ->
       c1 = node childStyle
       root = withChildren [c1] (node defaultStyle)
       layoutRoot = computeLayout defaultConfig (Size (DimPoints cw) (DimPoints 20)) root
-      [l1] = layoutChildren layoutRoot
-      (_, _, w, _) = layoutBounds l1
-      expected = cw * p / 100
-  in approxEq w expected
+  in expectChildren1 layoutRoot $ \l1 ->
+      let (_, _, w, _) = layoutBounds l1
+          expected = cw * p / 100
+      in approxEq w expected
   where
     gen = do
       cw <- chooseFloat (10, 500)
@@ -100,10 +103,10 @@ propPaddingOrigin = forAll gen $ \(cw, ch, pad, borderW) ->
       childStyle = defaultStyle & setSize (DimPoints 10) (DimPoints 10)
       root = withChildren [node childStyle] (node rootStyle)
       layoutRoot = computeLayout defaultConfig (Size (DimPoints cw) (DimPoints ch)) root
-      [l1] = layoutChildren layoutRoot
-      (x, y, _, _) = layoutBounds l1
-      expected = pad + borderW
-  in approxEq x expected .&&. approxEq y expected
+  in expectChildren1 layoutRoot $ \l1 ->
+      let (x, y, _, _) = layoutBounds l1
+          expected = pad + borderW
+      in approxEq x expected .&&. approxEq y expected
   where
     gen = do
       pad <- chooseFloat (0, 20)
@@ -118,10 +121,10 @@ propPercentPaddingWidth = forAll gen $ \(cw, ch, p) ->
       childStyle = defaultStyle & setSize (DimPoints 10) (DimPoints 10)
       root = withChildren [node childStyle] (node rootStyle)
       layoutRoot = computeLayout defaultConfig (Size (DimPoints cw) (DimPoints ch)) root
-      [l1] = layoutChildren layoutRoot
-      (x, y, _, _) = layoutBounds l1
-      expected = cw * p / 100
-  in approxEq x expected .&&. approxEq y expected
+  in expectChildren1 layoutRoot $ \l1 ->
+      let (x, y, _, _) = layoutBounds l1
+          expected = cw * p / 100
+      in approxEq x expected .&&. approxEq y expected
   where
     gen = do
       cw <- chooseFloat (50, 300)
@@ -136,10 +139,10 @@ propAutoMarginsCenter = forAll gen $ \(cw, w) ->
         & setMarginLR ValAuto ValAuto
       root = withChildren [node childStyle] (node defaultStyle)
       layoutRoot = computeLayout defaultConfig (Size (DimPoints cw) (DimPoints 20)) root
-      [l1] = layoutChildren layoutRoot
-      (x, _, _, _) = layoutBounds l1
-      expected = (cw - w) / 2
-  in approxEq x expected
+  in expectChildren1 layoutRoot $ \l1 ->
+      let (x, _, _, _) = layoutBounds l1
+          expected = (cw - w) / 2
+      in approxEq x expected
   where
     gen = do
       cw <- chooseFloat (50, 300)
@@ -155,9 +158,9 @@ propNonNegativeSizes = forAll gen $ \(cw, ch, pad, borderW, w, h) ->
       root = withChildren [node childStyle] (node rootStyle)
       layoutRoot = computeLayout defaultConfig (Size (DimPoints cw) (DimPoints ch)) root
       (rw, rh) = layoutSize layoutRoot
-      [l1] = layoutChildren layoutRoot
-      (_, _, cw1, ch1) = layoutBounds l1
-  in rw >= 0 .&&. rh >= 0 .&&. cw1 >= 0 .&&. ch1 >= 0
+  in expectChildren1 layoutRoot $ \l1 ->
+      let (_, _, cw1, ch1) = layoutBounds l1
+      in rw >= 0 .&&. rh >= 0 .&&. cw1 >= 0 .&&. ch1 >= 0
   where
     layoutSize n =
       let (_, _, w0, h0) = layoutBounds n
@@ -181,9 +184,9 @@ propBoxSizingBorderBox = forAll gen $ \(w, pad, borderW) ->
         & setBorderAll borderW
       root = withChildren [node childStyle] (node defaultStyle)
       layoutRoot = computeLayout defaultConfig (Size (DimPoints 500) (DimPoints 100)) root
-      [l1] = layoutChildren layoutRoot
-      (_, _, w1, _) = layoutBounds l1
-  in approxEq w1 w
+  in expectChildren1 layoutRoot $ \l1 ->
+      let (_, _, w1, _) = layoutBounds l1
+      in approxEq w1 w
   where
     gen = do
       w <- chooseFloat (10, 200)
@@ -199,10 +202,10 @@ propBoxSizingContentBox = forAll gen $ \(w, pad, borderW) ->
         & setBorderAll borderW
       root = withChildren [node childStyle] (node defaultStyle)
       layoutRoot = computeLayout defaultConfig (Size (DimPoints 500) (DimPoints 100)) root
-      [l1] = layoutChildren layoutRoot
-      (_, _, w1, _) = layoutBounds l1
-      expected = w + pad * 2 + borderW * 2
-  in approxEq w1 expected
+  in expectChildren1 layoutRoot $ \l1 ->
+      let (_, _, w1, _) = layoutBounds l1
+          expected = w + pad * 2 + borderW * 2
+      in approxEq w1 expected
   where
     gen = do
       w <- chooseFloat (10, 200)
@@ -220,9 +223,9 @@ propStretchMaxHeight = forAll gen $ \(rootH, maxH) ->
         & setAlignItems AlignStretch
       root = withChildren [node childStyle] (node rootStyle)
       layoutRoot = computeLayout defaultConfig (Size (DimPoints 100) (DimPoints rootH)) root
-      [l1] = layoutChildren layoutRoot
-      (_, _, _, h1) = layoutBounds l1
-  in h1 <= maxH + 0.01
+  in expectChildren1 layoutRoot $ \l1 ->
+      let (_, _, _, h1) = layoutBounds l1
+      in counterexample ("expected height <= " ++ show maxH ++ ", got " ++ show h1) (h1 <= maxH + 0.01)
   where
     gen = do
       rootH <- chooseFloat (50, 200)
@@ -275,16 +278,105 @@ propBaselineAlignsEqual = forAll gen $ \(h1, h2, base) ->
         & setAlignItems AlignBaseline
       root = withChildren [c1, c2] (node rootStyle)
       layoutRoot = computeLayout defaultConfig (Size (DimPoints 200) DimUndefined) root
-      [l1, l2] = layoutChildren layoutRoot
-      (_, y1, _, _) = layoutBounds l1
-      (_, y2, _, _) = layoutBounds l2
-  in approxEq y1 y2
+  in expectChildren2 layoutRoot $ \l1 l2 ->
+      let (_, y1, _, _) = layoutBounds l1
+          (_, y2, _, _) = layoutBounds l2
+      in approxEq y1 y2
   where
     gen = do
       h1 <- chooseFloat (10, 80)
       h2 <- chooseFloat (10, 80)
       base <- chooseFloat (0, min h1 h2)
       pure (h1, h2, base)
+
+propAutoMarginsCrossAxisCenter :: Property
+propAutoMarginsCrossAxisCenter = forAll gen $ \(ch, h) ->
+  let childStyle = defaultStyle
+        & setSize (DimPoints 20) (DimPoints h)
+        & setMarginLTRB (ValPoints 0) ValAuto (ValPoints 0) ValAuto
+      rootStyle = defaultStyle
+        & setFlexDirection Row
+        & setAlignItems AlignFlexStart
+      root = withChildren [node childStyle] (node rootStyle)
+      layoutRoot = computeLayout defaultConfig (Size (DimPoints 100) (DimPoints ch)) root
+  in expectChildren1 layoutRoot $ \l1 ->
+      let (_, y1, _, _) = layoutBounds l1
+          expected = (ch - h) / 2
+      in approxEq y1 expected
+  where
+    gen = do
+      ch <- chooseFloat (40, 200)
+      h <- chooseFloat (10, ch - 10)
+      pure (ch, h)
+
+propFlexBasisPercent :: Property
+propFlexBasisPercent = forAll gen $ \(cw, p) ->
+  let childStyle = defaultStyle
+        & setFlexBasis (DimPercent p)
+        & setFlexGrow 0
+        & setFlexShrink 0
+        & setHeight (DimPoints 10)
+      rootStyle = defaultStyle
+        & setFlexDirection Row
+        & setAlignItems AlignFlexStart
+      root = withChildren [node childStyle] (node rootStyle)
+      layoutRoot = computeLayout defaultConfig (Size (DimPoints cw) (DimPoints 20)) root
+  in expectChildren1 layoutRoot $ \l1 ->
+      let (_, _, w1, _) = layoutBounds l1
+          expected = cw * p / 100
+      in approxEq w1 expected
+  where
+    gen = do
+      cw <- chooseFloat (50, 400)
+      p <- chooseFloat (5, 95)
+      pure (cw, p)
+
+propJustifySpaceEvenlyPositions :: Property
+propJustifySpaceEvenlyPositions = forAll gen $ \(cw, w) ->
+  let childStyle = defaultStyle & setSize (DimPoints w) (DimPoints 10)
+      c1 = node childStyle
+      c2 = node childStyle
+      c3 = node childStyle
+      rootStyle = defaultStyle
+        & setFlexDirection Row
+        & setJustifyContent JustifySpaceEvenly
+        & setAlignItems AlignFlexStart
+      root = withChildren [c1, c2, c3] (node rootStyle)
+      layoutRoot = computeLayout defaultConfig (Size (DimPoints cw) (DimPoints 20)) root
+  in expectChildren3 layoutRoot $ \l1 l2 l3 ->
+      let (x1, _, _, _) = layoutBounds l1
+          (x2, _, _, _) = layoutBounds l2
+          (x3, _, _, _) = layoutBounds l3
+          remSpace = cw - 3 * w
+          gap = remSpace / 4
+          expected1 = gap
+          expected2 = gap + w + gap
+          expected3 = expected2 + w + gap
+      in approxEq x1 expected1 .&&. approxEq x2 expected2 .&&. approxEq x3 expected3
+  where
+    gen = do
+      w <- chooseFloat (5, 20)
+      extra <- chooseFloat (10, 120)
+      let cw = 3 * w + extra
+      pure (cw, w)
+
+expectChildren1 :: LayoutNode -> (LayoutNode -> Property) -> Property
+expectChildren1 layout f =
+  case layoutChildren layout of
+    [l1] -> f l1
+    kids -> counterexample ("expected 1 child, got " ++ show (length kids)) False
+
+expectChildren2 :: LayoutNode -> (LayoutNode -> LayoutNode -> Property) -> Property
+expectChildren2 layout f =
+  case layoutChildren layout of
+    [l1, l2] -> f l1 l2
+    kids -> counterexample ("expected 2 children, got " ++ show (length kids)) False
+
+expectChildren3 :: LayoutNode -> (LayoutNode -> LayoutNode -> LayoutNode -> Property) -> Property
+expectChildren3 layout f =
+  case layoutChildren layout of
+    [l1, l2, l3] -> f l1 l2 l3
+    kids -> counterexample ("expected 3 children, got " ++ show (length kids)) False
 
 approxEq :: Float -> Float -> Property
 approxEq a b = counterexample ("expected " ++ show b ++ ", got " ++ show a) (abs (a - b) < 0.01)

@@ -43,12 +43,12 @@ fitContentSpec dim = case dim of
 
 computeLayoutInternal :: LayoutConfig -> Size -> Node -> LayoutNode
 computeLayoutInternal cfg rootSize =
-  computeNodeLayout cfg rootSize Nothing
+  computeNodeLayout cfg rootSize Nothing LTR
 
-computeNodeLayout :: LayoutConfig -> Size -> Maybe (Float, Float) -> Node -> LayoutNode
-computeNodeLayout cfg ownerSize allocated n =
+computeNodeLayout :: LayoutConfig -> Size -> Maybe (Float, Float) -> Direction -> Node -> LayoutNode
+computeNodeLayout cfg ownerSize allocated parentDir n =
   let s = N.style n
-      dir = resolveDirection s
+      dir = resolveDirection parentDir s
       ownerW = dimensionToMaybe (width ownerSize)
       ownerH = dimensionToMaybe (height ownerSize)
       widthDim = S.width s
@@ -59,9 +59,9 @@ computeNodeLayout cfg ownerSize allocated n =
       sizeOwnerH = if isJust heightIntrinsic then Nothing else ownerH
       allocatedW = fmap fst allocated
       allocatedH = fmap snd allocated
-      paddingE = resolveEdgesValue (S.padding s) dir ownerW ownerH
-      borderE = resolveEdgesFloat (S.border s) dir
-      marginE = resolveEdgesValue (S.margin s) dir ownerW ownerH
+      paddingE = resolveEdgesValue (S.padding s) dir (S.writingMode s) ownerW ownerH
+      borderE = resolveEdgesFloat (S.border s) dir (S.writingMode s)
+      marginE = resolveEdgesValue (S.margin s) dir (S.writingMode s) ownerW ownerH
       padBorderW = edgeLeft paddingE + edgeRight paddingE + edgeLeft borderE + edgeRight borderE
       padBorderH = edgeTop paddingE + edgeBottom paddingE + edgeTop borderE + edgeBottom borderE
       widthDef = resolveDimensionWith widthDim ownerW
@@ -217,7 +217,7 @@ layoutContainer cfg n resolvedBorderW resolvedBorderH ownerW ownerH innerW inner
       (sizedLines3, linePositions) = positionLines axisInfo s finalInnerCross' gapCross sizedLines2
       positionedFlex = concat (zipWith (positionLineItems s axisInfo finalInnerMain finalInnerCross' gapMain) linePositions sizedLines3)
       ownerSize = Size (maybe DimUndefined DimPoints innerW) (maybe DimUndefined DimPoints innerH)
-      flexLayouts = reorderFlexLayouts (map (buildFlexLayout cfg ownerSize paddingE borderE) positionedFlex)
+      flexLayouts = reorderFlexLayouts (map (buildFlexLayout cfg ownerSize dir paddingE borderE) positionedFlex)
       staticPositions = if null absKids
         then []
         else computeStaticPositions cfg axisInfo s dir (Just finalInnerMain) (Just finalInnerCross') gapMain gapCross (S.flexWrap s) indexedChildren
@@ -277,9 +277,9 @@ axisFromStyle s dir =
           else blockReverse
   in AxisInfo mainAxis' crossAxis' mainRev crossRev
 
-resolveDirection :: Style -> Direction
-resolveDirection s = case S.direction s of
-  Inherit -> LTR
+resolveDirection :: Direction -> Style -> Direction
+resolveDirection parent s = case S.direction s of
+  Inherit -> parent
   other -> other
 
 mainGap :: Style -> AxisInfo -> Float
@@ -298,39 +298,96 @@ edgeTop = topE
 edgeBottom :: EdgeValues a -> a
 edgeBottom = bottomE
 
-resolveEdgesValue :: EdgeValues Value -> Direction -> Maybe Float -> Maybe Float -> EdgeValues Float
-resolveEdgesValue vals dir refW _refH =
-  let leftV = resolveValue (pickEdgeValue vals dir EdgeLeft) refW
-      rightV = resolveValue (pickEdgeValue vals dir EdgeRight) refW
-      topV = resolveValue (pickEdgeValue vals dir EdgeTop) refW
-      bottomV = resolveValue (pickEdgeValue vals dir EdgeBottom) refW
+resolveEdgesValue :: EdgeValues Value -> Direction -> WritingMode -> Maybe Float -> Maybe Float -> EdgeValues Float
+resolveEdgesValue vals dir wm refW _refH =
+  let leftV = resolveValue (pickEdgeValue vals dir wm EdgeLeft) refW
+      rightV = resolveValue (pickEdgeValue vals dir wm EdgeRight) refW
+      topV = resolveValue (pickEdgeValue vals dir wm EdgeTop) refW
+      bottomV = resolveValue (pickEdgeValue vals dir wm EdgeBottom) refW
   in EdgeValues leftV topV rightV bottomV 0 0 0 0 0
 
-resolveEdgesFloat :: EdgeValues Float -> Direction -> EdgeValues Float
-resolveEdgesFloat vals dir =
-  EdgeValues (pickEdgeFloat vals dir EdgeLeft)
-             (pickEdgeFloat vals dir EdgeTop)
-             (pickEdgeFloat vals dir EdgeRight)
-             (pickEdgeFloat vals dir EdgeBottom)
+resolveEdgesFloat :: EdgeValues Float -> Direction -> WritingMode -> EdgeValues Float
+resolveEdgesFloat vals dir wm =
+  EdgeValues (pickEdgeFloat vals dir wm EdgeLeft)
+             (pickEdgeFloat vals dir wm EdgeTop)
+             (pickEdgeFloat vals dir wm EdgeRight)
+             (pickEdgeFloat vals dir wm EdgeBottom)
              0 0 0 0 0
 
-pickEdgeValue :: EdgeValues Value -> Direction -> Edge -> Value
-pickEdgeValue vals dir edge =
-  case edge of
-    EdgeLeft -> firstNonAuto [leftE vals, if dir == LTR then startE vals else endE vals, horizontalE vals, allE vals]
-    EdgeRight -> firstNonAuto [rightE vals, if dir == LTR then endE vals else startE vals, horizontalE vals, allE vals]
-    EdgeTop -> firstNonAuto [topE vals, verticalE vals, allE vals]
-    EdgeBottom -> firstNonAuto [bottomE vals, verticalE vals, allE vals]
-    _ -> ValAuto
+pickEdgeValue :: EdgeValues Value -> Direction -> WritingMode -> Edge -> Value
+pickEdgeValue vals dir wm edge =
+  let inlineAxis = case wm of
+        HorizontalTB -> AxisRow
+        VerticalRL -> AxisColumn
+        VerticalLR -> AxisColumn
+      inlineReverse = dir == RTL
+      startV = if inlineReverse then endE vals else startE vals
+      endV = if inlineReverse then startE vals else endE vals
+  in case edge of
+      EdgeLeft ->
+        if inlineAxis == AxisRow
+          then firstNonAuto [leftE vals, startV, horizontalE vals, allE vals]
+          else firstNonAuto [leftE vals, horizontalE vals, allE vals]
+      EdgeRight ->
+        if inlineAxis == AxisRow
+          then firstNonAuto [rightE vals, endV, horizontalE vals, allE vals]
+          else firstNonAuto [rightE vals, horizontalE vals, allE vals]
+      EdgeTop ->
+        if inlineAxis == AxisColumn
+          then firstNonAuto [topE vals, startV, verticalE vals, allE vals]
+          else firstNonAuto [topE vals, verticalE vals, allE vals]
+      EdgeBottom ->
+        if inlineAxis == AxisColumn
+          then firstNonAuto [bottomE vals, endV, verticalE vals, allE vals]
+          else firstNonAuto [bottomE vals, verticalE vals, allE vals]
+      _ -> ValAuto
 
-pickEdgeFloat :: EdgeValues Float -> Direction -> Edge -> Float
-pickEdgeFloat vals dir edge =
-  case edge of
-    EdgeLeft -> firstNonZero [leftE vals, if dir == LTR then startE vals else endE vals, horizontalE vals, allE vals]
-    EdgeRight -> firstNonZero [rightE vals, if dir == LTR then endE vals else startE vals, horizontalE vals, allE vals]
-    EdgeTop -> firstNonZero [topE vals, verticalE vals, allE vals]
-    EdgeBottom -> firstNonZero [bottomE vals, verticalE vals, allE vals]
-    _ -> 0
+pickEdgeFloat :: EdgeValues Float -> Direction -> WritingMode -> Edge -> Float
+pickEdgeFloat vals dir wm edge =
+  let inlineAxis = case wm of
+        HorizontalTB -> AxisRow
+        VerticalRL -> AxisColumn
+        VerticalLR -> AxisColumn
+      inlineReverse = dir == RTL
+      startV = if inlineReverse then endE vals else startE vals
+      endV = if inlineReverse then startE vals else endE vals
+      horiz = horizontalE vals
+      vert = verticalE vals
+      allV = allE vals
+      leftV = leftE vals
+      rightV = rightE vals
+      topV = topE vals
+      bottomV = bottomE vals
+      leftShorthand = leftV == horiz && leftV == allV
+      rightShorthand = rightV == horiz && rightV == allV
+      topShorthand = topV == vert && topV == allV
+      bottomShorthand = bottomV == vert && bottomV == allV
+  in case edge of
+      EdgeLeft ->
+        if inlineAxis == AxisRow
+          then if leftShorthand && startV /= leftV
+            then startV
+            else firstNonZero [leftV, startV, horiz, allV]
+          else firstNonZero [leftV, horiz, allV]
+      EdgeRight ->
+        if inlineAxis == AxisRow
+          then if rightShorthand && endV /= rightV
+            then endV
+            else firstNonZero [rightV, endV, horiz, allV]
+          else firstNonZero [rightV, horiz, allV]
+      EdgeTop ->
+        if inlineAxis == AxisColumn
+          then if topShorthand && startV /= topV
+            then startV
+            else firstNonZero [topV, startV, vert, allV]
+          else firstNonZero [topV, vert, allV]
+      EdgeBottom ->
+        if inlineAxis == AxisColumn
+          then if bottomShorthand && endV /= bottomV
+            then endV
+            else firstNonZero [bottomV, endV, vert, allV]
+          else firstNonZero [bottomV, vert, allV]
+      _ -> 0
 
 firstNonAuto :: [Value] -> Value
 firstNonAuto [] = ValAuto
@@ -489,8 +546,8 @@ intrinsicContentForDim dimGetter axis ownerW ownerH resolvedContentW resolvedCon
         AxisRow -> mw
         AxisColumn -> mh
 
-intrinsicMainContent :: LayoutConfig -> AxisInfo -> Style -> Maybe Float -> Maybe Float -> Node -> Intrinsic -> Float
-intrinsicMainContent cfg axisInfo _cs _mainRef crossRef kid mode =
+intrinsicMainContent :: LayoutConfig -> AxisInfo -> Direction -> Style -> Maybe Float -> Maybe Float -> Node -> Intrinsic -> Float
+intrinsicMainContent cfg axisInfo parentDir _cs _mainRef crossRef kid mode =
   case N.measure kid of
     Just f ->
       let MeasureOverride modeMain availMain = intrinsicOverride mode
@@ -503,10 +560,10 @@ intrinsicMainContent cfg axisInfo _cs _mainRef crossRef kid mode =
     Nothing ->
       if null (N.children kid)
         then 0
-        else measureContentMainIntrinsic cfg axisInfo Nothing crossRef kid mode
+        else measureContentMainIntrinsic cfg axisInfo parentDir Nothing crossRef kid mode
 
-measureContentMainIntrinsic :: LayoutConfig -> AxisInfo -> Maybe Float -> Maybe Float -> Node -> Intrinsic -> Float
-measureContentMainIntrinsic cfg axisInfo _mainRef crossRef kid mode =
+measureContentMainIntrinsic :: LayoutConfig -> AxisInfo -> Direction -> Maybe Float -> Maybe Float -> Node -> Intrinsic -> Float
+measureContentMainIntrinsic cfg axisInfo parentDir _mainRef crossRef kid mode =
   let mainRef' = case mode of
         IntrinsicMin -> Just 0
         IntrinsicMax -> Nothing
@@ -514,7 +571,7 @@ measureContentMainIntrinsic cfg axisInfo _mainRef crossRef kid mode =
         if mainAxis axisInfo == AxisRow
           then Size (maybe DimUndefined DimPoints mainRef') (maybe DimUndefined DimPoints crossRef)
           else Size (maybe DimUndefined DimPoints crossRef) (maybe DimUndefined DimPoints mainRef')
-      measured = computeNodeLayout cfg ownerSize Nothing kid
+      measured = computeNodeLayout cfg ownerSize Nothing parentDir kid
       l = LT.layout measured
   in if mainAxis axisInfo == AxisRow then LT.width l else LT.height l
 
@@ -548,25 +605,25 @@ buildFlexItem cfg axisInfo parentStyle dir innerMain innerCross idx kid =
       crossRef = innerCross
       ownerW = if mainAxis axisInfo == AxisRow then innerMain else innerCross
       ownerH = if mainAxis axisInfo == AxisRow then innerCross else innerMain
-      paddingE = resolveEdgesValue (S.padding cs) dir ownerW ownerH
-      borderE = resolveEdgesFloat (S.border cs) dir
+      paddingE = resolveEdgesValue (S.padding cs) dir (S.writingMode cs) ownerW ownerH
+      borderE = resolveEdgesFloat (S.border cs) dir (S.writingMode cs)
       padBorderMain =
         if mainAxis axisInfo == AxisRow
           then edgeLeft paddingE + edgeRight paddingE + edgeLeft borderE + edgeRight borderE
           else edgeTop paddingE + edgeBottom paddingE + edgeTop borderE + edgeBottom borderE
-      baseMain = resolveBaseMain cfg axisInfo cs mainRef crossRef padBorderMain kid
+      baseMain = resolveBaseMain cfg axisInfo dir cs mainRef crossRef padBorderMain kid
       mainDim = if mainAxis axisInfo == AxisRow then S.width cs else S.height cs
       basisDim = S.flexBasis cs
       explicitContent =
         case resolveDimensionWith mainDim mainRef <|> resolveDimensionWith basisDim mainRef of
           Just v -> if S.boxSizing cs == BorderBox then max 0 (v - padBorderMain) else v
-          Nothing -> intrinsicMainContent cfg axisInfo cs mainRef crossRef kid IntrinsicMin
+          Nothing -> intrinsicMainContent cfg axisInfo dir cs mainRef crossRef kid IntrinsicMin
       minContentMain = explicitContent + padBorderMain
       minDim = if mainAxis axisInfo == AxisRow then S.minWidth cs else S.minHeight cs
-      mStart = resolveMarginFor axisInfo dir mainRef kid True
-      mEnd = resolveMarginFor axisInfo dir mainRef kid False
-      cStart = resolveCrossMarginFor axisInfo dir crossRef kid True
-      cEnd = resolveCrossMarginFor axisInfo dir crossRef kid False
+      mStart = resolveMarginFor axisInfo dir (S.writingMode cs) ownerW kid True
+      mEnd = resolveMarginFor axisInfo dir (S.writingMode cs) ownerW kid False
+      cStart = resolveCrossMarginFor axisInfo dir (S.writingMode cs) ownerW kid True
+      cEnd = resolveCrossMarginFor axisInfo dir (S.writingMode cs) ownerW kid False
       mStartAuto = isAutoMargin (S.margin cs) dir (mainMarginEdge axisInfo True)
       mEndAuto = isAutoMargin (S.margin cs) dir (mainMarginEdge axisInfo False)
       cStartAuto = isAutoMargin (S.margin cs) dir (crossMarginEdge axisInfo True)
@@ -603,8 +660,8 @@ buildFlexItem cfg axisInfo parentStyle dir innerMain innerCross idx kid =
       , itemMaxMain = maxMain
       }
 
-resolveBaseMain :: LayoutConfig -> AxisInfo -> Style -> Maybe Float -> Maybe Float -> Float -> Node -> Float
-resolveBaseMain cfg axisInfo cs mainRef crossRef padBorderMain kid =
+resolveBaseMain :: LayoutConfig -> AxisInfo -> Direction -> Style -> Maybe Float -> Maybe Float -> Float -> Node -> Float
+resolveBaseMain cfg axisInfo dir cs mainRef crossRef padBorderMain kid =
   let basisDim = S.flexBasis cs
       basis = resolveDimensionWith basisDim mainRef
       mainSize = if mainAxis axisInfo == AxisRow
@@ -635,7 +692,7 @@ resolveBaseMain cfg axisInfo cs mainRef crossRef padBorderMain kid =
       contentMain
         | isJust base0 || isJust measuredContent = Nothing
         | null (N.children kid) = Nothing
-        | otherwise = Just (measureContentMain cfg axisInfo mainRef crossRef kid)
+        | otherwise = Just (measureContentMain cfg axisInfo dir mainRef crossRef kid)
       base =
         fromMaybe 0
           ( baseFromSpecified
@@ -646,19 +703,19 @@ resolveBaseMain cfg axisInfo cs mainRef crossRef padBorderMain kid =
         case intrinsicMode dim of
           Nothing -> Nothing
           Just mode ->
-            let content = intrinsicMainContent cfg axisInfo cs mainRef crossRef kid mode
+            let content = intrinsicMainContent cfg axisInfo dir cs mainRef crossRef kid mode
             in Just (content + padBorderMain)
   in base
 
-resolveMarginFor :: AxisInfo -> Direction -> Maybe Float -> Node -> Bool -> Float
-resolveMarginFor axisInfo dir ref kid isStart =
+resolveMarginFor :: AxisInfo -> Direction -> WritingMode -> Maybe Float -> Node -> Bool -> Float
+resolveMarginFor axisInfo dir wm ref kid isStart =
   let edge = mainMarginEdge axisInfo isStart
-  in resolveValue (pickEdgeValue (S.margin (N.style kid)) dir edge) ref
+  in resolveValue (pickEdgeValue (S.margin (N.style kid)) dir wm edge) ref
 
-resolveCrossMarginFor :: AxisInfo -> Direction -> Maybe Float -> Node -> Bool -> Float
-resolveCrossMarginFor axisInfo dir ref kid isStart =
+resolveCrossMarginFor :: AxisInfo -> Direction -> WritingMode -> Maybe Float -> Node -> Bool -> Float
+resolveCrossMarginFor axisInfo dir wm ref kid isStart =
   let edge = crossMarginEdge axisInfo isStart
-  in resolveValue (pickEdgeValue (S.margin (N.style kid)) dir edge) ref
+  in resolveValue (pickEdgeValue (S.margin (N.style kid)) dir wm edge) ref
 
 mainMarginEdge :: AxisInfo -> Bool -> Edge
 mainMarginEdge axisInfo isStart
@@ -801,7 +858,7 @@ sizeLine cfg parentStyle axisInfo dir innerMain innerCross gapMain forceLineCros
       baselines0 = mapMaybe baselineInfo sizedCross0
       maxAscent = maximum (0 : map fst baselines0)
       maxDescent = maximum (0 : map snd baselines0)
-      lineCrossBase = if null baselines0 then maxCross else maxAscent + maxDescent
+      lineCrossBase = if null baselines0 then maxCross else max maxCross (maxAscent + maxDescent)
       lineCrossTarget = fromMaybe lineCrossBase forceLineCross
       -- apply stretch if needed
       sizedCross = map (applyStretch axisInfo innerCross lineCrossTarget) sizedCross0
@@ -809,7 +866,12 @@ sizeLine cfg parentStyle axisInfo dir innerMain innerCross gapMain forceLineCros
       baselines = mapMaybe baselineInfo sizedCross
       maxAscent2 = maximum (0 : map fst baselines)
       maxDescent2 = maximum (0 : map snd baselines)
-      lineCross = if null baselines then lineCrossTarget else maxAscent2 + maxDescent2
+      lineCross =
+        if null baselines
+          then lineCrossTarget
+          else
+            let maxCross2 = maximum (0 : map (outerCross axisInfo) sizedCross)
+            in max maxCross2 (maxAscent2 + maxDescent2)
       lineMainUsed = sum (map (outerMain axisInfo) sizedCross) + gapMain * fromIntegral (max 0 (length sizedCross - 1))
   in FlexLineSized sizedCross lineMainUsed lineCross maxAscent
 
@@ -819,8 +881,8 @@ sizeCross cfg _parentStyle axisInfo dir innerMain innerCross (it, mainSize) =
       cs = N.style kid
       ownerW = if mainAxis axisInfo == AxisRow then innerMain else innerCross
       ownerH = if mainAxis axisInfo == AxisRow then innerCross else innerMain
-      paddingE = resolveEdgesValue (S.padding cs) dir ownerW ownerH
-      borderE = resolveEdgesFloat (S.border cs) dir
+      paddingE = resolveEdgesValue (S.padding cs) dir (S.writingMode cs) ownerW ownerH
+      borderE = resolveEdgesFloat (S.border cs) dir (S.writingMode cs)
       padBorderMain =
         if mainAxis axisInfo == AxisRow
           then edgeLeft paddingE + edgeRight paddingE + edgeLeft borderE + edgeRight borderE
@@ -866,7 +928,7 @@ sizeCross cfg _parentStyle axisInfo dir innerMain innerCross (it, mainSize) =
             Nothing ->
               if null (N.children kid)
                 then Just 0
-                else Just (measureContentCross cfg axisInfo contentMainSize crossRef kid)
+                else Just (measureContentCross cfg axisInfo dir contentMainSize crossRef kid)
       crossSpecified = case resolved of
         Just v -> Just (if S.boxSizing cs == BorderBox then v else v + padBorderCross)
         Nothing ->
@@ -889,7 +951,7 @@ sizeCross cfg _parentStyle axisInfo dir innerMain innerCross (it, mainSize) =
                   if overflowVisible
                     then measuredContent <|> aspectContent <|> if null (N.children kid)
                       then Nothing
-                      else Just (measureContentCross cfg axisInfo contentMainSize crossRef kid)
+                      else Just (measureContentCross cfg axisInfo dir contentMainSize crossRef kid)
                     else Just 0
             in fmap (+ padBorderCross) contentCross
           else Nothing
@@ -915,7 +977,7 @@ sizeCross cfg _parentStyle axisInfo dir innerMain innerCross (it, mainSize) =
                 if null (N.children kid)
                   then Just (if S.boxSizing cs == BorderBox then padBorderCross else 0)
                   else
-                    let contentCross = measureContentCross cfg axisInfo contentMainSize crossRef kid
+                    let contentCross = measureContentCross cfg axisInfo dir contentMainSize crossRef kid
                     in Just (if S.boxSizing cs == BorderBox then contentCross + padBorderCross else contentCross)
   in FlexItemSized it mainSize crossSize minCross maxCross (baselineFor axisInfo (itemAlignSelf it) kid mainSize crossSize usedMeasuredBaseline padBorderCrossStart) crossExplicit
 
@@ -1116,21 +1178,21 @@ applyAutoMargins autoSize itemSized =
       it' = it { itemMarginMainStart = mStart, itemMarginMainEnd = mEnd }
   in itemSized { sizedItem = it' }
 
-buildChildLayout :: LayoutConfig -> Size -> EdgeValues Float -> EdgeValues Float -> (Node, Float, Float, Float, Float) -> LayoutNode
-buildChildLayout cfg ownerSize paddingE borderE (kid, x, y, w, h) =
+buildChildLayout :: LayoutConfig -> Size -> Direction -> EdgeValues Float -> EdgeValues Float -> (Node, Float, Float, Float, Float) -> LayoutNode
+buildChildLayout cfg ownerSize parentDir paddingE borderE (kid, x, y, w, h) =
   let originX = edgeLeft paddingE + edgeLeft borderE
       originY = edgeTop paddingE + edgeTop borderE
-      childLayout = computeNodeLayout cfg ownerSize (Just (w, h)) kid
+      childLayout = computeNodeLayout cfg ownerSize (Just (w, h)) parentDir kid
       l = LT.layout childLayout
       l' = l { LT.left = originX + x + LT.left l, LT.top = originY + y + LT.top l }
   in childLayout { LT.layout = applyRounding cfg l' }
 
-buildFlexLayout :: LayoutConfig -> Size -> EdgeValues Float -> EdgeValues Float -> (FlexItemSized, Float, Float, Float, Float) -> (Int, LayoutNode)
-buildFlexLayout cfg ownerSize paddingE borderE (itemSized, x, y, w, h) =
+buildFlexLayout :: LayoutConfig -> Size -> Direction -> EdgeValues Float -> EdgeValues Float -> (FlexItemSized, Float, Float, Float, Float) -> (Int, LayoutNode)
+buildFlexLayout cfg ownerSize parentDir paddingE borderE (itemSized, x, y, w, h) =
   let it = sizedItem itemSized
       idx = itemIndex it
       kid = itemNode it
-  in (idx, buildChildLayout cfg ownerSize paddingE borderE (kid, x, y, w, h))
+  in (idx, buildChildLayout cfg ownerSize parentDir paddingE borderE (kid, x, y, w, h))
 
 reorderFlexLayouts :: [(Int, LayoutNode)] -> [LayoutNode]
 reorderFlexLayouts layouts =
@@ -1157,11 +1219,12 @@ lookupStaticPos positions idx = lookup idx positions
 layoutAbsChild :: LayoutConfig -> Size -> EdgeValues Float -> EdgeValues Float -> Maybe Float -> Maybe Float -> Direction -> (Int -> Maybe (Float, Float)) -> (Int, Node) -> LayoutNode
 layoutAbsChild cfg ownerSize paddingE borderE innerW innerH dir staticLookup (idx, kid) =
   let cs = N.style kid
-      leftV = resolveValueMaybe (pickEdgeValue (S.position cs) dir EdgeLeft) innerW
-      rightV = resolveValueMaybe (pickEdgeValue (S.position cs) dir EdgeRight) innerW
-      topV = resolveValueMaybe (pickEdgeValue (S.position cs) dir EdgeTop) innerH
-      bottomV = resolveValueMaybe (pickEdgeValue (S.position cs) dir EdgeBottom) innerH
-      marginE = resolveEdgesValue (S.margin cs) dir innerW innerH
+      wm = S.writingMode cs
+      leftV = resolveValueMaybe (pickEdgeValue (S.position cs) dir wm EdgeLeft) innerW
+      rightV = resolveValueMaybe (pickEdgeValue (S.position cs) dir wm EdgeRight) innerW
+      topV = resolveValueMaybe (pickEdgeValue (S.position cs) dir wm EdgeTop) innerH
+      bottomV = resolveValueMaybe (pickEdgeValue (S.position cs) dir wm EdgeBottom) innerH
+      marginE = resolveEdgesValue (S.margin cs) dir wm innerW innerH
       marginLeft = edgeLeft marginE
       marginRight = edgeRight marginE
       marginTop = edgeTop marginE
@@ -1170,15 +1233,15 @@ layoutAbsChild cfg ownerSize paddingE borderE innerW innerH dir staticLookup (id
       marginRightAuto = isAutoMargin (S.margin cs) dir EdgeRight
       marginTopAuto = isAutoMargin (S.margin cs) dir EdgeTop
       marginBottomAuto = isAutoMargin (S.margin cs) dir EdgeBottom
-      paddingChild = resolveEdgesValue (S.padding cs) dir innerW innerH
-      borderChild = resolveEdgesFloat (S.border cs) dir
+      paddingChild = resolveEdgesValue (S.padding cs) dir wm innerW innerH
+      borderChild = resolveEdgesFloat (S.border cs) dir wm
       padBorderW = edgeLeft paddingChild + edgeRight paddingChild + edgeLeft borderChild + edgeRight borderChild
       padBorderH = edgeTop paddingChild + edgeBottom paddingChild + edgeTop borderChild + edgeBottom borderChild
       widthIntrinsic = intrinsicMode (S.width cs)
       heightIntrinsic = intrinsicMode (S.height cs)
       intrinsicLayout =
         if isJust widthIntrinsic || isJust heightIntrinsic
-          then Just (computeNodeLayout cfg ownerSize Nothing kid)
+          then Just (computeNodeLayout cfg ownerSize Nothing dir kid)
           else Nothing
       intrinsicW = fmap (LT.width . LT.layout) intrinsicLayout
       intrinsicH = fmap (LT.height . LT.layout) intrinsicLayout
@@ -1198,8 +1261,24 @@ layoutAbsChild cfg ownerSize paddingE borderE innerW innerH dir staticLookup (id
               (Nothing, Just topVal, Just bottomVal, Just ih) -> Just (max 0 (ih - topVal - bottomVal))
               _ -> Nothing
         in (w', h')
-      contentW0 = fmap (\val -> max 0 (val - padBorderW)) w0
-      contentH0 = fmap (\val -> max 0 (val - padBorderH)) h0
+      autoOwnerSize =
+        let ownerW' = case w0 of
+              Just bw -> DimPoints (max 0 (bw - padBorderW))
+              Nothing -> DimUndefined
+            ownerH' = case h0 of
+              Just bh -> DimPoints (max 0 (bh - padBorderH))
+              Nothing -> DimUndefined
+        in Size ownerW' ownerH'
+      autoLayout =
+        if isNothing w0 || isNothing h0
+          then intrinsicLayout <|> Just (computeNodeLayout cfg autoOwnerSize Nothing dir kid)
+          else Nothing
+      autoW = fmap (LT.width . LT.layout) autoLayout
+      autoH = fmap (LT.height . LT.layout) autoLayout
+      w1 = w0 <|> autoW
+      h1 = h0 <|> autoH
+      contentW0 = fmap (\val -> max 0 (val - padBorderW)) w1
+      contentH0 = fmap (\val -> max 0 (val - padBorderH)) h1
       (contentW1, contentH1) = applyAspectRatio (S.aspectRatio cs) contentW0 contentH0
       (minContentW, maxContentW) = resolveContentMinMax (S.boxSizing cs) (S.minWidth cs) (S.maxWidth cs) innerW padBorderW
       (minContentH, maxContentH) = resolveContentMinMax (S.boxSizing cs) (S.minHeight cs) (S.maxHeight cs) innerH padBorderH
@@ -1242,7 +1321,7 @@ layoutAbsChild cfg ownerSize paddingE borderE innerW innerH dir staticLookup (id
           _ -> staticY
       originX = edgeLeft paddingE + edgeLeft borderE
       originY = edgeTop paddingE + edgeTop borderE
-      childLayout = computeNodeLayout cfg ownerSize (Just (w, h)) kid
+      childLayout = computeNodeLayout cfg ownerSize (Just (w, h)) dir kid
       l = LT.layout childLayout
       l' = l { LT.left = originX + x0 + LT.left l, LT.top = originY + y0 + LT.top l }
   in childLayout { LT.layout = applyRounding cfg l' }
@@ -1299,10 +1378,11 @@ applyRelativeOffset s dir ownerW ownerH l =
   if S.positionType s /= PositionRelative
     then l
     else
-      let leftV = resolveValueMaybe (pickEdgeValue (S.position s) dir EdgeLeft) ownerW
-          rightV = resolveValueMaybe (pickEdgeValue (S.position s) dir EdgeRight) ownerW
-          topV = resolveValueMaybe (pickEdgeValue (S.position s) dir EdgeTop) ownerH
-          bottomV = resolveValueMaybe (pickEdgeValue (S.position s) dir EdgeBottom) ownerH
+      let wm = S.writingMode s
+          leftV = resolveValueMaybe (pickEdgeValue (S.position s) dir wm EdgeLeft) ownerW
+          rightV = resolveValueMaybe (pickEdgeValue (S.position s) dir wm EdgeRight) ownerW
+          topV = resolveValueMaybe (pickEdgeValue (S.position s) dir wm EdgeTop) ownerH
+          bottomV = resolveValueMaybe (pickEdgeValue (S.position s) dir wm EdgeBottom) ownerH
           dx = case (leftV, rightV) of
             (Just x, _) -> x
             (Nothing, Just r) -> -r
@@ -1313,24 +1393,24 @@ applyRelativeOffset s dir ownerW ownerH l =
             _ -> 0
       in l { LT.left = LT.left l + dx, LT.top = LT.top l + dy }
 
-measureContentMain :: LayoutConfig -> AxisInfo -> Maybe Float -> Maybe Float -> Node -> Float
-measureContentMain cfg axisInfo mainRef crossRef kid =
-  measureContentMainIntrinsic cfg axisInfo mainRef crossRef kid IntrinsicMax
+measureContentMain :: LayoutConfig -> AxisInfo -> Direction -> Maybe Float -> Maybe Float -> Node -> Float
+measureContentMain cfg axisInfo parentDir mainRef crossRef kid =
+  measureContentMainIntrinsic cfg axisInfo parentDir mainRef crossRef kid IntrinsicMax
 
-measureContentCross :: LayoutConfig -> AxisInfo -> Float -> Maybe Float -> Node -> Float
-measureContentCross cfg axisInfo mainSize crossRef kid =
+measureContentCross :: LayoutConfig -> AxisInfo -> Direction -> Float -> Maybe Float -> Node -> Float
+measureContentCross cfg axisInfo parentDir mainSize crossRef kid =
   let ownerSize =
         if mainAxis axisInfo == AxisRow
           then Size (DimPoints mainSize) DimUndefined
           else Size DimUndefined (DimPoints mainSize)
-      measured = computeNodeLayout cfg ownerSize Nothing kid
+      measured = computeNodeLayout cfg ownerSize Nothing parentDir kid
       l = LT.layout measured
       cs = N.style kid
-      dir = resolveDirection cs
+      dir = resolveDirection parentDir cs
       ownerW = if mainAxis axisInfo == AxisRow then Just mainSize else crossRef
       ownerH = if mainAxis axisInfo == AxisRow then crossRef else Just mainSize
-      paddingE = resolveEdgesValue (S.padding cs) dir ownerW ownerH
-      borderE = resolveEdgesFloat (S.border cs) dir
+      paddingE = resolveEdgesValue (S.padding cs) dir (S.writingMode cs) ownerW ownerH
+      borderE = resolveEdgesFloat (S.border cs) dir (S.writingMode cs)
       padBorderCross =
         if mainAxis axisInfo == AxisRow
           then edgeTop paddingE + edgeBottom paddingE + edgeTop borderE + edgeBottom borderE

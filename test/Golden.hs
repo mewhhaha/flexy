@@ -42,6 +42,8 @@ goldenTests = testGroup "flexy-golden"
   , golden "absolute_right_bottom" absoluteRightBottom
   , golden "flex_shrink" flexShrinkCase
   , golden "align_content_space_between" alignContentSpaceBetween
+  , golden "align_content_space_around" alignContentSpaceAround
+  , golden "align_content_space_evenly" alignContentSpaceEvenly
   , golden "measure_callback" measureCallback
   , golden "gap_column_with_column" gapColumnWithColumn
   , golden "aspect_ratio_from_height" aspectRatioFromHeight
@@ -50,6 +52,7 @@ goldenTests = testGroup "flexy-golden"
   , golden "percent_padding_uses_parent_width" percentPaddingWidth
   , golden "border_start_end_rtl" borderStartEndRtl
   , golden "auto_margin_main_axis" autoMarginMainAxis
+  , golden "auto_margin_cross_axis" autoMarginCrossAxis
   , golden "absolute_min_max_clamp" absoluteMinMaxClamp
   , golden "explicit_zero_cross_size_no_stretch" explicitZeroCrossNoStretch
   , golden "minimal_api_smoke" minimalApiSmoke
@@ -57,6 +60,7 @@ goldenTests = testGroup "flexy-golden"
   , golden "order_property" orderProperty
   , golden "min_size_auto" minSizeAuto
   , golden "flex_basis_auto_content" flexBasisAutoContent
+  , golden "flex_basis_percent" flexBasisPercent
   , golden "absolute_static_position" absoluteStaticPosition
   , golden "box_sizing_content_box" boxSizingContentBox
   , golden "box_sizing_border_box" boxSizingBorderBox
@@ -69,7 +73,15 @@ goldenTests = testGroup "flexy-golden"
   , golden "container_max_content_width" containerMaxContentWidth
   , golden "overflow_hidden_allows_shrink" overflowHiddenAllowsShrink
   , golden "writing_mode_vertical_rl" writingModeVerticalRL
+  , golden "writing_mode_vertical_lr" writingModeVerticalLR
   , golden "fit_content_container_clamp" fitContentContainerClamp
+  , golden "justify_space_evenly" justifySpaceEvenly
+  , golden "direction_inheritance_rtl" directionInheritanceRtl
+  , golden "absolute_auto_size_measure" absoluteAutoSizeMeasure
+  , golden "baseline_non_baseline_tall" baselineNonBaselineTall
+  , golden "percent_margin_uses_width" percentMarginUsesWidth
+  , golden "writing_mode_start_end" writingModeStartEnd
+  , golden "explicit_zero_border_override" explicitZeroBorderOverride
   ]
 
   where
@@ -95,6 +107,8 @@ goldenTests = testGroup "flexy-golden"
         "absolute_right_bottom" -> Size (DimPoints 200) (DimPoints 200)
         "flex_shrink" -> Size (DimPoints 100) (DimPoints 20)
         "align_content_space_between" -> Size (DimPoints 100) (DimPoints 100)
+        "align_content_space_around" -> Size (DimPoints 120) (DimPoints 100)
+        "align_content_space_evenly" -> Size (DimPoints 120) (DimPoints 100)
         "measure_callback" -> Size (DimPoints 200) (DimPoints 100)
         "gap_column_with_column" -> Size (DimPoints 100) (DimPoints 100)
         "aspect_ratio_from_height" -> Size (DimPoints 200) (DimPoints 200)
@@ -103,6 +117,7 @@ goldenTests = testGroup "flexy-golden"
         "percent_padding_uses_parent_width" -> Size (DimPoints 200) (DimPoints 100)
         "border_start_end_rtl" -> Size (DimPoints 100) (DimPoints 40)
         "auto_margin_main_axis" -> Size (DimPoints 100) (DimPoints 40)
+        "auto_margin_cross_axis" -> Size (DimPoints 100) (DimPoints 40)
         "absolute_min_max_clamp" -> Size (DimPoints 100) (DimPoints 100)
         "explicit_zero_cross_size_no_stretch" -> Size (DimPoints 100) (DimPoints 20)
         "minimal_api_smoke" -> Size (DimPoints 100) (DimPoints 50)
@@ -110,6 +125,7 @@ goldenTests = testGroup "flexy-golden"
         "order_property" -> Size (DimPoints 100) (DimPoints 20)
         "min_size_auto" -> Size (DimPoints 100) (DimPoints 20)
         "flex_basis_auto_content" -> Size (DimPoints 120) (DimPoints 20)
+        "flex_basis_percent" -> Size (DimPoints 200) (DimPoints 20)
         "absolute_static_position" -> Size (DimPoints 100) (DimPoints 20)
         "box_sizing_content_box" -> Size (DimPoints 100) (DimPoints 40)
         "box_sizing_border_box" -> Size (DimPoints 100) (DimPoints 40)
@@ -122,7 +138,15 @@ goldenTests = testGroup "flexy-golden"
         "container_max_content_width" -> Size DimUndefined DimUndefined
         "overflow_hidden_allows_shrink" -> Size (DimPoints 50) (DimPoints 20)
         "writing_mode_vertical_rl" -> Size (DimPoints 100) (DimPoints 60)
+        "writing_mode_vertical_lr" -> Size (DimPoints 100) (DimPoints 60)
         "fit_content_container_clamp" -> Size (DimPoints 100) (DimPoints 40)
+        "justify_space_evenly" -> Size (DimPoints 100) (DimPoints 20)
+        "direction_inheritance_rtl" -> Size (DimPoints 100) (DimPoints 50)
+        "absolute_auto_size_measure" -> Size (DimPoints 200) (DimPoints 200)
+        "baseline_non_baseline_tall" -> Size (DimPoints 100) DimUndefined
+        "percent_margin_uses_width" -> Size (DimPoints 200) (DimPoints 100)
+        "writing_mode_start_end" -> Size (DimPoints 100) (DimPoints 100)
+        "explicit_zero_border_override" -> Size (DimPoints 50) (DimPoints 30)
         _ -> Size DimUndefined DimUndefined
 
     basicRow =
@@ -296,6 +320,30 @@ goldenTests = testGroup "flexy-golden"
           root = withKey "root" (node rootStyle)
       in withChildren [c1, c2, c3] root
 
+    alignContentSpaceAround =
+      let childStyle = defaultStyle & setSize (DimPoints 60) (DimPoints 10)
+          c1 = withKey "c1" (node childStyle)
+          c2 = withKey "c2" (node childStyle)
+          c3 = withKey "c3" (node childStyle)
+          rootStyle = defaultStyle
+            & setFlexDirection Row
+            & setFlexWrap Wrap
+            & setAlignContent AlignSpaceAround
+          root = withKey "root" (node rootStyle)
+      in withChildren [c1, c2, c3] root
+
+    alignContentSpaceEvenly =
+      let childStyle = defaultStyle & setSize (DimPoints 60) (DimPoints 10)
+          c1 = withKey "c1" (node childStyle)
+          c2 = withKey "c2" (node childStyle)
+          c3 = withKey "c3" (node childStyle)
+          rootStyle = defaultStyle
+            & setFlexDirection Row
+            & setFlexWrap Wrap
+            & setAlignContent AlignSpaceEvenly
+          root = withKey "root" (node rootStyle)
+      in withChildren [c1, c2, c3] root
+
     measureCallback =
       let measureFn _ = MeasureOutput 80 30 Nothing
           child = withKey "m1" (withMeasure measureFn (node defaultStyle))
@@ -372,6 +420,17 @@ goldenTests = testGroup "flexy-golden"
           root = withKey "root" (node rootStyle)
       in withChildren [c1] root
 
+    autoMarginCrossAxis =
+      let childStyle = defaultStyle
+            & setSize (DimPoints 20) (DimPoints 10)
+            & setMarginLTRB (ValPoints 0) ValAuto (ValPoints 0) ValAuto
+          c1 = withKey "c1" (node childStyle)
+          rootStyle = defaultStyle
+            & setFlexDirection Row
+            & setAlignItems AlignFlexStart
+          root = withKey "root" (node rootStyle)
+      in withChildren [c1] root
+
     absoluteMinMaxClamp =
       let absStyle = defaultStyle
             & setPositionType PositionAbsolute
@@ -445,6 +504,25 @@ goldenTests = testGroup "flexy-golden"
           rootStyle = defaultStyle & setFlexDirection Row
           root = withKey "root" (node rootStyle)
       in withChildren [flexItem, sibling] root
+
+    flexBasisPercent =
+      let c1Style = defaultStyle
+            & setFlexBasis (DimPercent 50)
+            & setFlexGrow 0
+            & setFlexShrink 0
+            & setHeight (DimPoints 10)
+          c2Style = defaultStyle
+            & setFlexBasis (DimPercent 25)
+            & setFlexGrow 0
+            & setFlexShrink 0
+            & setHeight (DimPoints 10)
+          c1 = withKey "c1" (node c1Style)
+          c2 = withKey "c2" (node c2Style)
+          rootStyle = defaultStyle
+            & setFlexDirection Row
+            & setAlignItems AlignFlexStart
+          root = withKey "root" (node rootStyle)
+      in withChildren [c1, c2] root
 
     absoluteStaticPosition =
       let n1 = withKey "n1" (node (defaultStyle & setSize (DimPoints 20) (DimPoints 10)))
@@ -602,6 +680,16 @@ goldenTests = testGroup "flexy-golden"
           root = withKey "root" (node rootStyle)
       in withChildren [c1, c2] root
 
+    writingModeVerticalLR =
+      let childStyle = defaultStyle & setSize (DimPoints 20) (DimPoints 10)
+          c1 = withKey "c1" (node childStyle)
+          c2 = withKey "c2" (node childStyle)
+          rootStyle = defaultStyle
+            & setWritingMode VerticalLR
+            & setFlexDirection Row
+          root = withKey "root" (node rootStyle)
+      in withChildren [c1, c2] root
+
     fitContentContainerClamp =
       let innerChildStyle = defaultStyle & setSize (DimPoints 60) (DimPoints 10)
           i1 = withKey "i1" (node innerChildStyle)
@@ -614,3 +702,85 @@ goldenTests = testGroup "flexy-golden"
           rootStyle = defaultStyle & setFlexDirection Row
           root = withKey "root" (node rootStyle)
       in withChildren [container] root
+
+    justifySpaceEvenly =
+      let childStyle = defaultStyle & setSize (DimPoints 10) (DimPoints 10)
+          c1 = withKey "c1" (node childStyle)
+          c2 = withKey "c2" (node childStyle)
+          c3 = withKey "c3" (node childStyle)
+          rootStyle = defaultStyle
+            & setFlexDirection Row
+            & setJustifyContent JustifySpaceEvenly
+            & setAlignItems AlignFlexStart
+          root = withKey "root" (node rootStyle)
+      in withChildren [c1, c2, c3] root
+
+    directionInheritanceRtl =
+      let grandStyle = defaultStyle & setSize (DimPoints 10) (DimPoints 10)
+          grand = withKey "grand" (node grandStyle)
+          childStyle = defaultStyle
+            & setBorderStartEnd 10 2
+            & setSize (DimPoints 40) (DimPoints 20)
+          child = withKey "child" (withChildren [grand] (node childStyle))
+          rootStyle = defaultStyle
+            & setDirection RTL
+            & setFlexDirection Row
+          root = withKey "root" (node rootStyle)
+      in withChildren [child] root
+
+    absoluteAutoSizeMeasure =
+      let measureFn _ = MeasureOutput 40 30 Nothing
+          absStyle = defaultStyle
+            & setPositionType PositionAbsolute
+            & setPositionLTRB (ValPoints 0) (ValPoints 0) ValAuto ValAuto
+          absNode = withKey "abs" (withMeasure measureFn (node absStyle))
+          rootStyle = defaultStyle
+            & setFlexDirection Row
+            & setAlignItems AlignFlexStart
+          root = withKey "root" (node rootStyle)
+      in withChildren [absNode] root
+
+    baselineNonBaselineTall =
+      let c1Style = defaultStyle & setSize (DimPoints 20) (DimPoints 10)
+          c2Style = defaultStyle
+            & setSize (DimPoints 20) (DimPoints 50)
+            & setAlignSelf AlignFlexStart
+          c1 = withKey "c1" (node c1Style)
+          c2 = withKey "c2" (node c2Style)
+          rootStyle = defaultStyle
+            & setFlexDirection Row
+            & setAlignItems AlignBaseline
+          root = withKey "root" (node rootStyle)
+      in withChildren [c1, c2] root
+
+    percentMarginUsesWidth =
+      let childStyle = defaultStyle
+            & setSize (DimPoints 20) (DimPoints 20)
+            & setMarginLTRB (ValPoints 0) (ValPercent 10) (ValPoints 0) (ValPoints 0)
+          child = withKey "c1" (node childStyle)
+          rootStyle = defaultStyle
+            & setFlexDirection Row
+            & setAlignItems AlignFlexStart
+          root = withKey "root" (node rootStyle)
+      in withChildren [child] root
+
+    writingModeStartEnd =
+      let grandStyle = defaultStyle & setSize (DimPoints 10) (DimPoints 10)
+          grand = withKey "grand" (node grandStyle)
+          childStyle = defaultStyle
+            & setWritingMode VerticalRL
+            & setBorderStartEnd 7 1
+            & setSize (DimPoints 30) (DimPoints 30)
+          child = withKey "child" (withChildren [grand] (node childStyle))
+          rootStyle = defaultStyle & setFlexDirection Row
+          root = withKey "root" (node rootStyle)
+      in withChildren [child] root
+
+    explicitZeroBorderOverride =
+      let childStyle = defaultStyle & setSize (DimPoints 10) (DimPoints 10)
+          child = withKey "child" (node childStyle)
+          rootStyle = defaultStyle
+            & setBorderAll 5
+            & setBorderStartEnd 0 5
+          root = withKey "root" (node rootStyle)
+      in withChildren [child] root
