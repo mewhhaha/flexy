@@ -1,3 +1,4 @@
+-- | Public API re-exports for building and computing flex layouts.
 module Flexy
   ( Node
   , LayoutNode

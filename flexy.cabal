@@ -1,8 +1,11 @@
 cabal-version:      3.14
 name:               flexy
 version:            0.1.0.0
--- synopsis:
--- description:
+synopsis:           Pure Haskell flexbox layout engine
+description:
+    Flexy is a pure Haskell flexbox layout engine inspired by Yoga.
+    It provides a small, functional API for building layout trees,
+    running the flexbox algorithm, and inspecting computed layouts.
 license:            MIT
 license-file:       LICENSE
 author:             mewhhaha
@@ -11,6 +14,7 @@ maintainer:         kopatheonlyone@hotmail.com
 category:           Graphics
 build-type:         Simple
 extra-doc-files:    CHANGELOG.md
+                    README.md
 -- extra-source-files:
 
 common warnings
