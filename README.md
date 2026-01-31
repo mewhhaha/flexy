@@ -1,20 +1,20 @@
 # Flexy
 
-Flexy is a pure Haskell flexbox layout engine inspired by Yoga. It provides a small, functional API for building layout trees, running the flexbox algorithm, and inspecting computed layouts.
+Flexy is a smol, pure Haskell flexbox layout engine inspired by Yoga. It gives you a tiny, functional API for building layout trees, running the flexbox algorithm, and peeking at computed layouts. uwu
 
 ## Features
 
-- Pure Haskell implementation (no FFI).
+- Pure Haskell implementation (no FFI, no spooky surprises).
 - Flexbox layout with wrapping, gaps, baseline alignment, and auto margins.
 - Min/max-content sizing, fit-content, aspect-ratio handling, and box-sizing.
 - Measure and baseline callbacks for text or custom nodes.
-- Deterministic layout output suitable for testing.
+- Deterministic layout output (nice for tests).
 
 ## Status
 
 Flexy targets the core flexbox model and several CSS sizing behaviors. It is not a full CSS engine. Overflow is modeled for auto-min sizing only (no clipping/scrolling). Writing modes are supported for axis resolution, but logical properties beyond that are intentionally minimal.
 
-Breaking changes are acceptable while the API stabilizes.
+Breaking changes are acceptable while the API stabilizes (sorry!).
 
 ### Display
 
