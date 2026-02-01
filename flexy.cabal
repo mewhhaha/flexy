@@ -56,3 +56,14 @@ test-suite flexy-tests
         , bytestring ^>=0.12
         , filepath ^>=1.5
     default-language: GHC2024
+
+executable flexy-sdl3-example
+    import:           warnings
+    hs-source-dirs:   examples
+    main-is:          FlexySDL3.hs
+    c-sources:        examples/cbits/flexy_sdl3_shim.c
+    build-depends:
+        base ^>=4.21.0.0
+        , flexy
+    pkgconfig-depends: sdl3
+    default-language: GHC2024
