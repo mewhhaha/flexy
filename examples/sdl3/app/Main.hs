@@ -2,7 +2,8 @@
 
 -- Example: Flexy + SDL 3.4 (minimal FFI bindings)
 --
--- Build/run (after adding the executable stanza in flexy.cabal):
+-- Build/run:
+--   cd examples
 --   cabal run flexy-sdl3-example
 --
 -- Controls:
@@ -11,13 +12,15 @@
 
 module Main (main) where
 
-import Control.Monad (forM_, unless, when)
+import Control.Monad (forM, forM_, unless, when)
 import Data.Function ((&))
 import Data.IORef (IORef, modifyIORef', newIORef, readIORef)
-import Data.Maybe (fromMaybe)
+import Data.List (intercalate)
+import Data.Maybe (fromMaybe, isNothing)
 import Foreign
-import Foreign.C.String (CString, withCString)
+import Foreign.C.String (CString, peekCString, withCString)
 import Foreign.C.Types (CBool(..), CFloat(..), CInt(..))
+import System.Environment (lookupEnv)
 
 import Flexy
 
@@ -62,6 +65,10 @@ foreign import ccall "SDL_RenderFillRect" sdlRenderFillRect :: Ptr SDL_Renderer 
 foreign import ccall "SDL_RenderPresent" sdlRenderPresent :: Ptr SDL_Renderer -> IO CBool
 
 foreign import ccall "SDL_Delay" sdlDelay :: Word32 -> IO ()
+foreign import ccall "SDL_GetError" sdlGetError :: IO CString
+foreign import ccall "SDL_SetHint" sdlSetHint :: CString -> CString -> IO CBool
+foreign import ccall "SDL_GetNumVideoDrivers" sdlGetNumVideoDrivers :: IO CInt
+foreign import ccall "SDL_GetVideoDriver" sdlGetVideoDriver :: CInt -> IO CString
 
 foreign import ccall "flexy_sdl_init_video_flag" sdlInitVideoFlag :: IO Word32
 foreign import ccall "flexy_sdl_poll_event" sdlPollEvent :: Ptr CInt -> IO CInt
@@ -69,17 +76,16 @@ foreign import ccall "flexy_sdl_poll_event" sdlPollEvent :: Ptr CInt -> IO CInt
 main :: IO ()
 main = do
   flags <- sdlInitVideoFlag
-  rc <- sdlInit flags
-  when (rc /= 0) (fail "SDL_Init failed")
+  initSDL flags
 
   let winW = 900
       winH = 600
 
   window <- withCString "Flexy + SDL3" $ \title -> sdlCreateWindow title winW winH 0
-  when (window == nullPtr) (fail "SDL_CreateWindow failed")
+  when (window == nullPtr) (sdlFail "SDL_CreateWindow")
 
   renderer <- sdlCreateRenderer window nullPtr
-  when (renderer == nullPtr) (fail "SDL_CreateRenderer failed")
+  when (renderer == nullPtr) (sdlFail "SDL_CreateRenderer")
 
   sidebarVisible <- newIORef True
   loop renderer winW winH sidebarVisible
@@ -87,6 +93,69 @@ main = do
   sdlDestroyRenderer renderer
   sdlDestroyWindow window
   sdlQuit
+
+sdlFail :: String -> IO a
+sdlFail label = do
+  err <- sdlErrorString
+  fail (label <> " failed: " <> formatError err)
+
+sdlErrorString :: IO String
+sdlErrorString = do
+  errPtr <- sdlGetError
+  if errPtr == nullPtr then pure "" else peekCString errPtr
+
+formatError :: String -> String
+formatError err =
+  if null err
+    then "<no error>"
+    else err
+
+initSDL :: Word32 -> IO ()
+initSDL flags = do
+  rc <- sdlInit flags
+  if rc == 0
+    then pure ()
+    else do
+      err <- sdlErrorString
+      drivers <- getVideoDrivers
+      envDriver <- lookupEnv "SDL_VIDEO_DRIVER"
+      envDriverCompat <- lookupEnv "SDL_VIDEODRIVER"
+      if isNothing envDriver && isNothing envDriverCompat && "dummy" `elem` drivers
+        then do
+          putStrLn "SDL_Init failed; falling back to dummy video driver."
+          _ <- setVideoDriverHint "dummy"
+          sdlQuit
+          rc2 <- sdlInit flags
+          when (rc2 /= 0) (sdlFailDetailed "SDL_Init" err drivers)
+        else sdlFailDetailed "SDL_Init" err drivers
+
+setVideoDriverHint :: String -> IO ()
+setVideoDriverHint driver =
+  withCString "SDL_VIDEO_DRIVER" $ \name ->
+    withCString driver $ \value -> do
+      _ <- sdlSetHint name value
+      pure ()
+
+getVideoDrivers :: IO [String]
+getVideoDrivers = do
+  count <- sdlGetNumVideoDrivers
+  let n = fromIntegral (max 0 count) :: Int
+  forM [0 .. n - 1] $ \idx -> do
+    namePtr <- sdlGetVideoDriver (fromIntegral idx)
+    if namePtr == nullPtr then pure "" else peekCString namePtr
+
+sdlFailDetailed :: String -> String -> [String] -> IO a
+sdlFailDetailed label err drivers =
+  fail (label <> " failed: " <> formatError err <> driverHint drivers)
+
+driverHint :: [String] -> String
+driverHint drivers =
+  case filter (not . null) drivers of
+    [] -> ""
+    names ->
+      "\nAvailable video drivers: "
+        <> intercalate ", " names
+        <> "\nHint: set SDL_VIDEO_DRIVER=<driver>"
 
 loop :: Ptr SDL_Renderer -> CInt -> CInt -> IORef Bool -> IO ()
 loop renderer winW winH sidebarVisible = do

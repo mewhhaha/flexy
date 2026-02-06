@@ -1,6 +1,8 @@
 # Cabal / GHC
 /dist-newstyle/
 /dist/
+/examples/dist-newstyle/
+/examples/sdl3/dist-newstyle/
 /.cabal/
 /.ghc.environment.*
 /cabal.project.local

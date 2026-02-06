@@ -109,6 +109,21 @@ cabal test
 
 The test suite includes golden layout fixtures and property-based tests.
 
+## SDL3 Demo
+
+The SDL3 demo now lives in `examples/sdl3`.
+
+```bash
+just demo
+```
+
+Or run directly:
+
+```bash
+cd examples
+cabal run flexy-sdl3-example
+```
+
 ## License
 
 MIT. See `LICENSE`.

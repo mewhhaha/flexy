@@ -1,0 +1,2 @@
+-- Keep the SDL3 example in this workspace so it builds against local flexy.
+packages: ./sdl3 ..
