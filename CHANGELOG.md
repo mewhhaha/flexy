@@ -23,5 +23,7 @@
   while distributed spacing continues to fall back safely.
 - Made flex allocation scale-independent and computed weight ratios in wider
   intermediates so small layouts and large finite factors remain accurate.
+- Kept flex totals and redistribution in wider intermediates so very large
+  bases shrink proportionally without overflowing or losing the target size.
 - Made the SDL3 example release SDL, window, and renderer resources when an
   exception interrupts initialization or rendering.

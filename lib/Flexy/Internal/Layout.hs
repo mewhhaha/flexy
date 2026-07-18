@@ -299,11 +299,16 @@ layoutLine parentRectangle contentSize direction' baseGap parentStyle crossOffse
 distributeMain :: Direction -> Float -> Float -> [Prepared a] -> [Float]
 distributeMain direction' availableMain gap' children' = map allocationSize (settle allocations)
   where
-    target = nonNegative
-      (availableMain
-        - gapsTotal gap' (length children')
-        - sum (map (mainMargins direction' . preparedMargin) children'))
-    initialFree = target - sum (map preparedBaseMain children')
+    target =
+      max 0
+        ( realToFrac availableMain
+            - realToFrac gap' * fromIntegral (max 0 (length children' - 1))
+            - sum (map outerMargin children')
+        )
+    outerMargin child =
+      realToFrac (mainBefore direction' (preparedMargin child))
+        + realToFrac (mainAfter direction' (preparedMargin child))
+    initialFree = target - sum (map (realToFrac . preparedBaseMain) children')
     growing = initialFree > 0
     allocations = map makeAllocation children'
     makeAllocation child =
@@ -324,10 +329,11 @@ distributeMain direction' availableMain gap' children' = map allocationSize (set
       | newlyFrozen current proposed = settle proposed
       | otherwise = proposed
       where
-        freeSpace = target - sum (map occupiedSize current)
-        occupiedSize allocation
-          | allocationFrozen allocation = allocationSize allocation
-          | otherwise = allocationBase allocation
+        remainingTarget =
+          target
+            - sum [realToFrac (allocationSize allocation) | allocation <- current, allocationFrozen allocation]
+        unfrozenBase =
+          sum [realToFrac (allocationBase allocation) | allocation <- current, not (allocationFrozen allocation)]
         totalFactor = sum [allocationFactor allocation | allocation <- current, not (allocationFrozen allocation)]
         proposed = map resize current
         resize allocation
@@ -338,10 +344,12 @@ distributeMain direction' availableMain gap' children' = map allocationSize (set
                 , allocationFrozen = clamped /= candidate
                 }
           where
+            factorRatio = allocationFactor allocation / totalFactor
             candidate =
               realToFrac
                 ( realToFrac (allocationBase allocation)
-                    + realToFrac freeSpace * allocationFactor allocation / totalFactor
+                    - unfrozenBase * factorRatio
+                    + remainingTarget * factorRatio
                 )
             clamped = clampLength (allocationMinimum allocation) (allocationMaximum allocation) candidate
         newlyFrozen before after = or (zipWith becameFrozen before after)

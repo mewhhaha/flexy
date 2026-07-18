@@ -13,6 +13,7 @@ exampleTests = testGroup "examples"
   , example "huge grow factors preserve their ratio" hugeGrowFactorsPreserveRatio
   , example "shrink divides overflow by weighted basis" shrinkDividesOverflow
   , example "huge shrink factors preserve their ratio" hugeShrinkFactorsPreserveRatio
+  , example "huge bases shrink to the available width" hugeBasesShrinkToAvailableWidth
   , example "minimum sizes freeze before remaining space is divided" minimumFreezes
   , example "maximum sizes freeze before remaining space is divided" maximumFreezes
   , example "padding, gaps, and alignment position a column" columnGeometry
@@ -82,6 +83,13 @@ hugeShrinkFactorsPreserveRatio =
   map (rectWidth . bounds) (children tree) QC.=== [50, 50]
   where
     child = styled (width (Points 100) <> shrink largestFiniteFloat) (leaf ())
+    tree = layout (Size 100 1) (row () [child, child])
+
+hugeBasesShrinkToAvailableWidth :: QC.Property
+hugeBasesShrinkToAvailableWidth =
+  map (rectWidth . bounds) (children tree) QC.=== [50, 50]
+  where
+    child = styled (width (Points largestFiniteFloat)) (leaf ())
     tree = layout (Size 100 1) (row () [child, child])
 
 minimumFreezes :: QC.Property
