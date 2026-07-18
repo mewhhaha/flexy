@@ -1,5 +1,6 @@
 module Flexy.Internal.Layout (layout) where
 
+import Control.Applicative ((<|>))
 import Data.List (mapAccumL)
 import Data.Maybe (fromMaybe)
 
@@ -32,6 +33,12 @@ data Allocation = Allocation
   , allocationFrozen :: !Bool
   }
 
+data ResolvedChild a = ResolvedChild
+  { resolvedPrepared :: Prepared a
+  , resolvedMain :: !Float
+  , resolvedCross :: !Float
+  }
+
 -- | Lay out the root at @(0, 0)@ and make it fill the supplied viewport.
 layout :: Size -> Node a -> Layout a
 layout viewport = layoutNode (Rect 0 0 viewportWidth viewportHeight)
@@ -62,9 +69,14 @@ layoutChildren rectangle node
     constraints = Constraints (Just contentWidth) (Just contentHeight)
     gap' = nonNegative (fromMaybe 0 (styleGap style))
     prepared = map (prepareChild axis constraints style) (nodeChildren node)
-    lines' = splitLines (fromMaybe NoWrap (styleWrap style)) direction' (axisSize axis contentSize) gap' prepared
-    lineSizes = crossSizes axis contentSize lines'
-    (_, positionedLines) = mapAccumL (layoutLine rectangle contentSize direction' gap' style) 0 (zip lines' lineSizes)
+    preparedLines = splitLines (fromMaybe NoWrap (styleWrap style)) direction' (axisSize axis contentSize) gap' prepared
+    resolvedLines = map (resolveLine axis constraints direction' (axisSize axis contentSize) gap') preparedLines
+    lineSizes = crossSizes axis contentSize resolvedLines
+    (_, positionedLines) =
+      mapAccumL
+        (layoutLine rectangle contentSize direction' gap' style)
+        0
+        (zip resolvedLines lineSizes)
 
 prepareChild :: Axis -> Constraints -> Style -> Node a -> Prepared a
 prepareChild axis constraints parentStyle child =
@@ -102,15 +114,17 @@ preferredSize constraints node = Size resolvedWidth resolvedHeight
   where
     style = nodeStyle node
     padding' = cleanBoxEdges (fromMaybe (allEdges 0) (stylePadding style))
+    specifiedWidth = styleWidth style >>= resolveLength (availableWidth constraints)
+    specifiedHeight = styleHeight style >>= resolveLength (availableHeight constraints)
     innerConstraints =
       Constraints
-        (subtractEdgeSpace (availableWidth constraints) (horizontalEdges padding'))
-        (subtractEdgeSpace (availableHeight constraints) (verticalEdges padding'))
+        (subtractEdgeSpace (specifiedWidth <|> availableWidth constraints) (horizontalEdges padding'))
+        (subtractEdgeSpace (specifiedHeight <|> availableHeight constraints) (verticalEdges padding'))
     intrinsic = intrinsicSize innerConstraints node
     intrinsicWidth = nonNegative (sizeWidth intrinsic) + horizontalEdges padding'
     intrinsicHeight = nonNegative (sizeHeight intrinsic) + verticalEdges padding'
-    preferredWidth = fromMaybe intrinsicWidth (styleWidth style >>= resolveLength (availableWidth constraints))
-    preferredHeight = fromMaybe intrinsicHeight (styleHeight style >>= resolveLength (availableHeight constraints))
+    preferredWidth = fromMaybe intrinsicWidth specifiedWidth
+    preferredHeight = fromMaybe intrinsicHeight specifiedHeight
     minimumWidth = resolvedMinimum (availableWidth constraints) (styleMinWidth style)
     minimumHeight = resolvedMinimum (availableHeight constraints) (styleMinHeight style)
     maximumWidth = styleMaxWidth style >>= resolveLength (availableWidth constraints)
@@ -126,11 +140,11 @@ intrinsicSize constraints node =
 
 intrinsicChildren :: Constraints -> Node a -> Size
 intrinsicChildren constraints node =
-  case childSizes of
+  case measuredLines of
     [] -> Size 0 0
     _
-      | mainAxis direction' == Horizontal -> Size mainTotal crossMaximum
-      | otherwise -> Size crossMaximum mainTotal
+      | axis == Horizontal -> Size intrinsicMain intrinsicCross
+      | otherwise -> Size intrinsicCross intrinsicMain
   where
     style = nodeStyle node
     direction' = fromMaybe Row (styleDirection style)
@@ -138,11 +152,33 @@ intrinsicChildren constraints node =
     gap' = nonNegative (fromMaybe 0 (styleGap style))
     childSizes = map measureChild (nodeChildren node)
     measureChild child =
-      let childSize = preferredSize constraints child
-          childMargin = cleanSignedEdges (fromMaybe (allEdges 0) (styleMargin (nodeStyle child)))
-      in (axisSize axis childSize + mainMargins direction' childMargin, crossAxisSize axis childSize + crossMargins axis childMargin)
-    mainTotal = sum (map fst childSizes) + gapsTotal gap' (length childSizes)
-    crossMaximum = foldl' (\largest (_, childCross) -> max largest childCross) 0 childSizes
+      let prepared = prepareChild axis constraints style child
+          childMargin = preparedMargin prepared
+      in
+        ( preparedBaseMain prepared + mainMargins direction' childMargin
+        , preparedCross prepared + crossMargins axis childMargin
+        )
+    measuredLines =
+      case (fromMaybe NoWrap (styleWrap style), constraintFor axis constraints) of
+        (Wrap, Just availableMain) -> splitMeasuredLines availableMain childSizes
+        _ -> [childSizes | not (null childSizes)]
+    intrinsicMain = foldl' (\largest line -> max largest (lineMain line)) 0 measuredLines
+    intrinsicCross = sum (map lineCross measuredLines) + gapsTotal gap' (length measuredLines)
+    lineMain line = sum (map fst line) + gapsTotal gap' (length line)
+    lineCross = foldl' (\largest (_, childCross) -> max largest childCross) 0
+
+    splitMeasuredLines availableMain children' = reverse (finish folded)
+      where
+        folded = foldl' addChild ([], [], 0) children'
+
+        addChild (completed, current, used) child
+          | null current = (completed, [child], fst child)
+          | used + gap' + fst child <= availableMain =
+              (completed, child : current, used + gap' + fst child)
+          | otherwise = (reverse current : completed, [child], fst child)
+
+        finish (completed, [], _) = completed
+        finish (completed, current, _) = reverse current : completed
 
 splitLines :: Wrap -> Direction -> Float -> Float -> [Prepared a] -> [[Prepared a]]
 splitLines NoWrap _ _ _ children' = [children' | not (null children')]
@@ -161,12 +197,48 @@ splitLines Wrap direction' availableMain gap' children' = reverse (finish folded
 
     outerMain child = preparedBaseMain child + mainMargins direction' (preparedMargin child)
 
-crossSizes :: Axis -> Size -> [[Prepared a]] -> [Float]
+resolveLine :: Axis -> Constraints -> Direction -> Float -> Float -> [Prepared a] -> [ResolvedChild a]
+resolveLine axis constraints direction' availableMain gap' prepared =
+  zipWith resolveChild prepared assignedMain
+  where
+    assignedMain = distributeMain direction' availableMain gap' prepared
+    resolveChild child childMain =
+      ResolvedChild
+        { resolvedPrepared = child
+        , resolvedMain = childMain
+        , resolvedCross = resolveCrossSize axis constraints childMain child
+        }
+
+resolveCrossSize :: Axis -> Constraints -> Float -> Prepared a -> Float
+resolveCrossSize axis constraints assignedMain child
+  | not (preparedCrossIsAuto child) = preparedCross child
+  | otherwise = clampLength (preparedMinCross child) (preparedMaxCross child) intrinsicCross
+  where
+    node = preparedNode child
+    padding' = cleanBoxEdges (fromMaybe (allEdges 0) (stylePadding (nodeStyle node)))
+    measurementConstraints =
+      case axis of
+        Horizontal ->
+          Constraints
+            (Just (nonNegative (assignedMain - horizontalEdges padding')))
+            (subtractEdgeSpace (availableHeight constraints) (verticalEdges padding'))
+        Vertical ->
+          Constraints
+            (subtractEdgeSpace (availableWidth constraints) (horizontalEdges padding'))
+            (Just (nonNegative (assignedMain - verticalEdges padding')))
+    intrinsicCross =
+      crossAxisSize axis (intrinsicSize measurementConstraints node)
+        + crossEdges axis padding'
+
+crossSizes :: Axis -> Size -> [[ResolvedChild a]] -> [Float]
 crossSizes _ _ [] = []
 crossSizes axis contentSize [singleLine] = [crossAxisSize axis contentSize | not (null singleLine)]
 crossSizes axis _ lines' = map naturalLineCross lines'
   where
-    naturalLineCross = foldl' (\largest child -> max largest (preparedCross child + crossMargins axis (preparedMargin child))) 0
+    naturalLineCross = foldl' (\largest child -> max largest (outerCross child)) 0
+    outerCross child =
+      resolvedCross child
+        + crossMargins axis (preparedMargin (resolvedPrepared child))
 
 layoutLine
   :: Rect
@@ -175,25 +247,26 @@ layoutLine
   -> Float
   -> Style
   -> Float
-  -> ([Prepared a], Float)
+  -> ([ResolvedChild a], Float)
   -> (Float, [Layout a])
 layoutLine parentRectangle contentSize direction' baseGap parentStyle crossOffset (line, lineCross) =
   (crossOffset + lineCross + baseGap, layouts)
   where
     axis = mainAxis direction'
     availableMain = axisSize axis contentSize
-    assignedMain = distributeMain direction' availableMain baseGap line
     occupiedMain =
-      sum assignedMain
-        + sum (map (mainMargins direction' . preparedMargin) line)
+      sum (map resolvedMain line)
+        + sum (map (mainMargins direction' . preparedMargin . resolvedPrepared) line)
         + gapsTotal baseGap (length line)
     remainingMain = nonNegative (availableMain - occupiedMain)
     (leading, between) = justifySpacing (fromMaybe Start (styleJustify parentStyle)) baseGap remainingMain (length line)
-    (_, layouts) = mapAccumL positionChild leading (zip line assignedMain)
+    (_, layouts) = mapAccumL positionChild leading line
 
-    positionChild cursor (child, childMain) =
+    positionChild cursor resolvedChild =
       (nextCursor, layoutNode childRectangle (preparedNode child))
       where
+        child = resolvedPrepared resolvedChild
+        childMain = resolvedMain resolvedChild
         margin' = preparedMargin child
         beforeMain = mainBefore direction' margin'
         afterMain = mainAfter direction' margin'
@@ -207,13 +280,18 @@ layoutLine parentRectangle contentSize direction' baseGap parentStyle crossOffse
         childCross
           | preparedAlign child == Stretch && preparedCrossIsAuto child =
               clampLength (preparedMinCross child) (preparedMaxCross child) availableCross
-          | otherwise = preparedCross child
+          | otherwise = resolvedCross resolvedChild
         crossFree = nonNegative (availableCross - childCross)
         childCrossOffset = crossOffset + crossBefore + alignOffset (preparedAlign child) crossFree
         contentOriginX = rectX parentRectangle + edgeLeft parentPadding
         contentOriginY = rectY parentRectangle + edgeTop parentPadding
         childRectangle
-          | axis == Horizontal = Rect (contentOriginX + physicalMain) (contentOriginY + childCrossOffset) childMain childCross
+          | axis == Horizontal =
+              Rect
+                (contentOriginX + physicalMain)
+                (contentOriginY + childCrossOffset)
+                childMain
+                childCross
           | otherwise = Rect (contentOriginX + childCrossOffset) (contentOriginY + physicalMain) childCross childMain
         nextCursor = logicalMain + childMain + afterMain + between
 
@@ -386,6 +464,10 @@ crossBeforeMargin Vertical = edgeLeft
 crossAfterMargin :: Axis -> Edges -> Float
 crossAfterMargin Horizontal = edgeBottom
 crossAfterMargin Vertical = edgeRight
+
+crossEdges :: Axis -> Edges -> Float
+crossEdges Horizontal = verticalEdges
+crossEdges Vertical = horizontalEdges
 
 horizontalEdges :: Edges -> Float
 horizontalEdges values = edgeLeft values + edgeRight values

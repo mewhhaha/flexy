@@ -19,6 +19,12 @@ exampleTests = testGroup "examples"
   , example "row-reverse positions children from the right" rowReverseGeometry
   , example "column-reverse positions children from the bottom" columnReverseGeometry
   , example "measurements receive the parent content constraint" measurementConstraint
+  , example "fixed widths constrain intrinsic measurement" fixedWidthConstrainsMeasurement
+  , example "flex shrink remeasures intrinsic cross size" shrinkRemeasuresCrossSize
+  , example "padding is removed from intrinsic constraints" paddingReducesMeasurementConstraint
+  , example "nested wrapping contributes every line to intrinsic height" nestedWrappingHeight
+  , example "column wrapping contributes every line to intrinsic width" columnWrappingWidth
+  , example "intrinsic wrapping uses flex basis for line breaks" wrappingUsesFlexBasis
   , example "nested bounds use absolute coordinates" nestedCoordinates
   , example "functor preserves geometry while changing values" functorPreservesGeometry
   ]
@@ -123,6 +129,90 @@ measurementConstraint =
     child = measured measureText "text"
     root = styled (padding (axisEdges 10 0) <> align AlignStart) (row "root" [child])
     tree = layout (Size 100 20) root
+
+fixedWidthConstrainsMeasurement :: QC.Property
+fixedWidthConstrainsMeasurement =
+  childBounds tree QC.=== Just (Rect 0 0 50 5)
+  where
+    measureText constraints = Size 100 (maybe 0 (/ 10) (availableWidth constraints))
+    child = styled (width (Points 50)) (measured measureText "text")
+    tree = layout (Size 100 20) (styled (align AlignStart) (row "root" [child]))
+
+shrinkRemeasuresCrossSize :: QC.Property
+shrinkRemeasuresCrossSize =
+  map bounds (children tree) QC.=== [Rect 0 0 50 5, Rect 50 0 50 5]
+  where
+    measureText constraints = Size 80 (maybe 0 (/ 10) (availableWidth constraints))
+    child name = measured measureText name
+    tree = layout (Size 100 20) (styled (align AlignStart) (row "root" [child "a", child "b"]))
+
+paddingReducesMeasurementConstraint :: QC.Property
+paddingReducesMeasurementConstraint =
+  childBounds tree QC.=== Just (Rect 0 0 50 30)
+  where
+    measureText constraints = Size 100 (maybe 0 id (availableWidth constraints))
+    child = styled (width (Points 50) <> padding (axisEdges 10 0)) (measured measureText "text")
+    tree = layout (Size 100 40) (styled (align AlignStart) (row "root" [child]))
+
+nestedWrappingHeight :: QC.Property
+nestedWrappingHeight =
+  case children tree of
+    [wrappedLayout] ->
+      QC.conjoin
+        [ bounds wrappedLayout QC.=== Rect 0 0 100 25
+        , map bounds (children wrappedLayout) QC.===
+            [ Rect 0 0 45 10
+            , Rect 50 0 45 10
+            , Rect 0 15 45 10
+            ]
+        ]
+    actual -> QC.counterexample ("expected one wrapping child, got " <> show (length actual)) False
+  where
+    box name = sized (Size 45 10) name
+    wrapped =
+      styled (width (Points 100) <> wrapping Wrap <> gap 5 <> align AlignStart) $
+        row "wrapped" [box "a", box "b", box "c"]
+    tree = layout (Size 100 100) (styled (align AlignStart) (row "root" [wrapped]))
+
+columnWrappingWidth :: QC.Property
+columnWrappingWidth =
+  case children tree of
+    [wrappedLayout] ->
+      QC.conjoin
+        [ bounds wrappedLayout QC.=== Rect 0 0 25 100
+        , map bounds (children wrappedLayout) QC.===
+            [ Rect 0 0 10 45
+            , Rect 0 50 10 45
+            , Rect 15 0 10 45
+            ]
+        ]
+    actual -> QC.counterexample ("expected one wrapping child, got " <> show (length actual)) False
+  where
+    box name = sized (Size 10 45) name
+    wrapped =
+      styled (height (Points 100) <> wrapping Wrap <> gap 5 <> align AlignStart) $
+        column "wrapped" [box "a", box "b", box "c"]
+    tree = layout (Size 100 100) (styled (align AlignStart) (row "root" [wrapped]))
+
+wrappingUsesFlexBasis :: QC.Property
+wrappingUsesFlexBasis =
+  case children tree of
+    [wrappedLayout] ->
+      QC.conjoin
+        [ bounds wrappedLayout QC.=== Rect 0 0 100 20
+        , map bounds (children wrappedLayout) QC.===
+            [ Rect 0 0 50 10
+            , Rect 50 0 50 10
+            , Rect 0 10 50 10
+            ]
+        ]
+    actual -> QC.counterexample ("expected one wrapping child, got " <> show (length actual)) False
+  where
+    box name = styled (basis (Points 50)) (sized (Size 10 10) name)
+    wrapped =
+      styled (width (Points 100) <> wrapping Wrap <> align AlignStart) $
+        row "wrapped" [box "a", box "b", box "c"]
+    tree = layout (Size 100 100) (styled (align AlignStart) (row "root" [wrapped]))
 
 nestedCoordinates :: QC.Property
 nestedCoordinates =

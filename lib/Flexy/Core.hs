@@ -257,7 +257,8 @@ padding value = mempty { stylePadding = Just value }
 margin :: Edges -> Style
 margin value = mempty { styleMargin = Just value }
 
--- | Pure intrinsic measurement under parent constraints.
+-- | Pure intrinsic measurement under content constraints.
+-- A measurement may be evaluated at both preferred and flex-assigned sizes.
 type Measure = Constraints -> Size
 
 -- | An immutable layout tree carrying an application-defined value at every node.

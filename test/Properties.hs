@@ -12,6 +12,7 @@ propertyTests = testGroup "properties"
   [ QC.testProperty "grow fills the content width" growFillsWidth
   , QC.testProperty "shrink never produces negative widths" shrinkIsNonNegative
   , QC.testProperty "percentages resolve against parent content" percentageUsesContent
+  , QC.testProperty "measurement follows the flex-assigned width" measurementFollowsAssignedWidth
   , QC.testProperty "all generated geometry is finite and non-negative" geometryIsValid
   , QC.testProperty "layout preserves tree values in traversal order" valuesArePreserved
   , QC.testProperty "style composition is associative" styleCompositionIsAssociative
@@ -56,6 +57,17 @@ percentageUsesContent (Positive rawWidth) =
     child = styled (width (Percent 0.25)) (leaf ())
     root = styled (padding (axisEdges 10 0)) (row () [child])
     tree = layout (Size viewportWidth 10) root
+
+measurementFollowsAssignedWidth :: Positive Float -> QC.Property
+measurementFollowsAssignedWidth (Positive rawWidth) =
+  QC.conjoin (map crossMatchesMain (children tree))
+  where
+    viewportWidth = bounded 1 1000 rawWidth
+    measureText constraints = Size 1000 (maybe 0 id (availableWidth constraints))
+    child = measured measureText ()
+    tree = layout (Size viewportWidth 1000) (styled (align AlignStart) (row () [child, child]))
+    crossMatchesMain childLayout =
+      approximately (rectHeight (bounds childLayout)) (rectWidth (bounds childLayout))
 
 geometryIsValid :: QC.NonNegative Float -> QC.NonNegative Float -> QC.Property
 geometryIsValid (QC.NonNegative rawWidth) (QC.NonNegative rawHeight) =

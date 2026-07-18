@@ -82,8 +82,9 @@ measureText constraints =
 ```
 
 A style width or height overrides the intrinsic dimension. The engine passes
-the parent content bounds to measurements and sanitizes non-finite or negative
-sizes at the public boundary.
+content constraints to measurements, then remeasures the cross size after flex
+distribution. This keeps wrapping content consistent with its assigned width.
+Non-finite or negative sizes are sanitized at the public boundary.
 
 ## Development
 
