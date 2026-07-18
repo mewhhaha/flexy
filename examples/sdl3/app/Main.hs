@@ -12,7 +12,7 @@
 
 module Main (main) where
 
-import Control.Exception (bracket, bracket_)
+import Control.Exception (bracket, bracket_, onException)
 import Control.Monad (forM, forM_, unless, when)
 import Data.IORef (IORef, modifyIORef', newIORef, readIORef)
 import Data.List (intercalate)
@@ -76,7 +76,7 @@ foreign import ccall "flexy_sdl_poll_event" sdlPollEvent :: Ptr CInt -> IO CInt
 main :: IO ()
 main = do
   flags <- sdlInitVideoFlag
-  bracket_ (initSDL flags) sdlQuit $ do
+  bracket_ (initSDL flags `onException` sdlQuit) sdlQuit $ do
     let winW = 900
         winH = 600
 

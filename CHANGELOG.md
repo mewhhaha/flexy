@@ -29,3 +29,5 @@
   exception interrupts initialization or rendering.
 - Made the SDL3 example stop with SDL's error evidence when a hint or rendering
   operation fails instead of continuing after a discarded status.
+- Ensured SDL shutdown also runs when initialization itself raises an
+  exception before entering the main resource bracket.
