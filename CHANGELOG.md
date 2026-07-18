@@ -15,3 +15,5 @@
   padding, and grow or shrink produce correct content heights.
 - Included every wrapped line when determining a nested container's intrinsic
   cross size, using the same flex bases as final placement.
+- Reused final line resolution during intrinsic container sizing so nested
+  measured content reflects child shrink and per-line assigned widths.

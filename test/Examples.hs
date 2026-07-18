@@ -25,6 +25,8 @@ exampleTests = testGroup "examples"
   , example "nested wrapping contributes every line to intrinsic height" nestedWrappingHeight
   , example "column wrapping contributes every line to intrinsic width" columnWrappingWidth
   , example "intrinsic wrapping uses flex basis for line breaks" wrappingUsesFlexBasis
+  , example "nested rows use remeasured intrinsic height" nestedRowRemeasuresHeight
+  , example "wrapped measured lines use their assigned widths" wrappedLinesRemeasureHeight
   , example "nested bounds use absolute coordinates" nestedCoordinates
   , example "functor preserves geometry while changing values" functorPreservesGeometry
   ]
@@ -212,6 +214,44 @@ wrappingUsesFlexBasis =
     wrapped =
       styled (width (Points 100) <> wrapping Wrap <> align AlignStart) $
         row "wrapped" [box "a", box "b", box "c"]
+    tree = layout (Size 100 100) (styled (align AlignStart) (row "root" [wrapped]))
+
+nestedRowRemeasuresHeight :: QC.Property
+nestedRowRemeasuresHeight =
+  case children tree of
+    [nestedLayout] ->
+      QC.conjoin
+        [ bounds nestedLayout QC.=== Rect 0 0 100 5
+        , map bounds (children nestedLayout) QC.===
+            [ Rect 0 0 50 5
+            , Rect 50 0 50 5
+            ]
+        ]
+    actual -> QC.counterexample ("expected one nested row, got " <> show (length actual)) False
+  where
+    measureText constraints = Size 80 (maybe 0 (/ 10) (availableWidth constraints))
+    nested =
+      styled (width (Points 100) <> align AlignStart) $
+        row "nested" [measured measureText "a", measured measureText "b"]
+    tree = layout (Size 100 100) (styled (align AlignStart) (row "root" [nested]))
+
+wrappedLinesRemeasureHeight :: QC.Property
+wrappedLinesRemeasureHeight =
+  case children tree of
+    [wrappedLayout] ->
+      QC.conjoin
+        [ bounds wrappedLayout QC.=== Rect 0 0 100 16
+        , map bounds (children wrappedLayout) QC.===
+            [ Rect 0 0 80 8
+            , Rect 0 8 80 8
+            ]
+        ]
+    actual -> QC.counterexample ("expected one wrapping row, got " <> show (length actual)) False
+  where
+    measureText constraints = Size 80 (maybe 0 (/ 10) (availableWidth constraints))
+    wrapped =
+      styled (width (Points 100) <> wrapping Wrap <> align AlignStart) $
+        row "wrapped" [measured measureText "a", measured measureText "b"]
     tree = layout (Size 100 100) (styled (align AlignStart) (row "root" [wrapped]))
 
 nestedCoordinates :: QC.Property

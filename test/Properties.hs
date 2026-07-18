@@ -13,6 +13,7 @@ propertyTests = testGroup "properties"
   , QC.testProperty "shrink never produces negative widths" shrinkIsNonNegative
   , QC.testProperty "percentages resolve against parent content" percentageUsesContent
   , QC.testProperty "measurement follows the flex-assigned width" measurementFollowsAssignedWidth
+  , QC.testProperty "nested intrinsic height follows assigned child widths" nestedHeightFollowsChildWidths
   , QC.testProperty "all generated geometry is finite and non-negative" geometryIsValid
   , QC.testProperty "layout preserves tree values in traversal order" valuesArePreserved
   , QC.testProperty "style composition is associative" styleCompositionIsAssociative
@@ -68,6 +69,19 @@ measurementFollowsAssignedWidth (Positive rawWidth) =
     tree = layout (Size viewportWidth 1000) (styled (align AlignStart) (row () [child, child]))
     crossMatchesMain childLayout =
       approximately (rectHeight (bounds childLayout)) (rectWidth (bounds childLayout))
+
+nestedHeightFollowsChildWidths :: Positive Float -> QC.Property
+nestedHeightFollowsChildWidths (Positive rawWidth) =
+  case children tree of
+    [nestedLayout] -> approximately (rectHeight (bounds nestedLayout)) (viewportWidth / 2)
+    actual -> QC.counterexample ("expected one nested row, got " <> show (length actual)) False
+  where
+    viewportWidth = bounded 1 1000 rawWidth
+    measureText constraints = Size 1000 (maybe 0 id (availableWidth constraints))
+    nested =
+      styled (width (Points viewportWidth) <> align AlignStart) $
+        row () [measured measureText (), measured measureText ()]
+    tree = layout (Size viewportWidth 1000) (styled (align AlignStart) (row () [nested]))
 
 geometryIsValid :: QC.NonNegative Float -> QC.NonNegative Float -> QC.Property
 geometryIsValid (QC.NonNegative rawWidth) (QC.NonNegative rawHeight) =

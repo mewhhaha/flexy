@@ -140,7 +140,7 @@ intrinsicSize constraints node =
 
 intrinsicChildren :: Constraints -> Node a -> Size
 intrinsicChildren constraints node =
-  case measuredLines of
+  case preparedLines of
     [] -> Size 0 0
     _
       | axis == Horizontal -> Size intrinsicMain intrinsicCross
@@ -150,35 +150,32 @@ intrinsicChildren constraints node =
     direction' = fromMaybe Row (styleDirection style)
     axis = mainAxis direction'
     gap' = nonNegative (fromMaybe 0 (styleGap style))
-    childSizes = map measureChild (nodeChildren node)
-    measureChild child =
-      let prepared = prepareChild axis constraints style child
-          childMargin = preparedMargin prepared
-      in
-        ( preparedBaseMain prepared + mainMargins direction' childMargin
-        , preparedCross prepared + crossMargins axis childMargin
-        )
-    measuredLines =
-      case (fromMaybe NoWrap (styleWrap style), constraintFor axis constraints) of
-        (Wrap, Just availableMain) -> splitMeasuredLines availableMain childSizes
-        _ -> [childSizes | not (null childSizes)]
-    intrinsicMain = foldl' (\largest line -> max largest (lineMain line)) 0 measuredLines
-    intrinsicCross = sum (map lineCross measuredLines) + gapsTotal gap' (length measuredLines)
-    lineMain line = sum (map fst line) + gapsTotal gap' (length line)
-    lineCross = foldl' (\largest (_, childCross) -> max largest childCross) 0
-
-    splitMeasuredLines availableMain children' = reverse (finish folded)
-      where
-        folded = foldl' addChild ([], [], 0) children'
-
-        addChild (completed, current, used) child
-          | null current = (completed, [child], fst child)
-          | used + gap' + fst child <= availableMain =
-              (completed, child : current, used + gap' + fst child)
-          | otherwise = (reverse current : completed, [child], fst child)
-
-        finish (completed, [], _) = completed
-        finish (completed, current, _) = reverse current : completed
+    availableMain = constraintFor axis constraints
+    prepared = map (prepareChild axis constraints style) (nodeChildren node)
+    preparedLines =
+      case (fromMaybe NoWrap (styleWrap style), availableMain) of
+        (Wrap, Just mainLimit) -> splitLines Wrap direction' mainLimit gap' prepared
+        _ -> [prepared | not (null prepared)]
+    resolvedLines =
+      case availableMain of
+        Just mainLimit -> map (resolveLine axis constraints direction' mainLimit gap') preparedLines
+        Nothing -> map (map resolveAtBase) preparedLines
+    resolveAtBase child =
+      ResolvedChild
+        { resolvedPrepared = child
+        , resolvedMain = preparedBaseMain child
+        , resolvedCross = resolveCrossSize axis constraints (preparedBaseMain child) child
+        }
+    intrinsicMain = foldl' (\largest line -> max largest (preparedLineMain line)) 0 preparedLines
+    intrinsicCross = sum (map resolvedLineCross resolvedLines) + gapsTotal gap' (length resolvedLines)
+    preparedLineMain line =
+      sum (map preparedOuterMain line) + gapsTotal gap' (length line)
+    preparedOuterMain child =
+      preparedBaseMain child + mainMargins direction' (preparedMargin child)
+    resolvedLineCross = foldl' (\largest child -> max largest (resolvedOuterCross child)) 0
+    resolvedOuterCross child =
+      resolvedCross child
+        + crossMargins axis (preparedMargin (resolvedPrepared child))
 
 splitLines :: Wrap -> Direction -> Float -> Float -> [Prepared a] -> [[Prepared a]]
 splitLines NoWrap _ _ _ children' = [children' | not (null children')]
