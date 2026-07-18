@@ -26,23 +26,23 @@ import Flexy
 
 -- Opaque SDL types
 
-data SDL_Window
+data SDLWindow
 
-data SDL_Renderer
+data SDLRenderer
 
 -- SDL_FRect (float rectangle)
-data SDL_FRect = SDL_FRect CFloat CFloat CFloat CFloat
+data SDLFRect = SDLFRect CFloat CFloat CFloat CFloat
 
-instance Storable SDL_FRect where
+instance Storable SDLFRect where
   sizeOf _ = 4 * sizeOf (undefined :: CFloat)
   alignment _ = alignment (undefined :: CFloat)
   peek ptr =
-    SDL_FRect
+    SDLFRect
       <$> peekByteOff ptr 0
       <*> peekByteOff ptr (sizeOf (undefined :: CFloat))
       <*> peekByteOff ptr (2 * sizeOf (undefined :: CFloat))
       <*> peekByteOff ptr (3 * sizeOf (undefined :: CFloat))
-  poke ptr (SDL_FRect x y w h) = do
+  poke ptr (SDLFRect x y w h) = do
     pokeByteOff ptr 0 x
     pokeByteOff ptr (sizeOf (undefined :: CFloat)) y
     pokeByteOff ptr (2 * sizeOf (undefined :: CFloat)) w
@@ -53,16 +53,16 @@ instance Storable SDL_FRect where
 foreign import ccall "SDL_Init" sdlInit :: Word32 -> IO CInt
 foreign import ccall "SDL_Quit" sdlQuit :: IO ()
 
-foreign import ccall "SDL_CreateWindow" sdlCreateWindow :: CString -> CInt -> CInt -> Word32 -> IO (Ptr SDL_Window)
-foreign import ccall "SDL_DestroyWindow" sdlDestroyWindow :: Ptr SDL_Window -> IO ()
+foreign import ccall "SDL_CreateWindow" sdlCreateWindow :: CString -> CInt -> CInt -> Word32 -> IO (Ptr SDLWindow)
+foreign import ccall "SDL_DestroyWindow" sdlDestroyWindow :: Ptr SDLWindow -> IO ()
 
-foreign import ccall "SDL_CreateRenderer" sdlCreateRenderer :: Ptr SDL_Window -> CString -> IO (Ptr SDL_Renderer)
-foreign import ccall "SDL_DestroyRenderer" sdlDestroyRenderer :: Ptr SDL_Renderer -> IO ()
+foreign import ccall "SDL_CreateRenderer" sdlCreateRenderer :: Ptr SDLWindow -> CString -> IO (Ptr SDLRenderer)
+foreign import ccall "SDL_DestroyRenderer" sdlDestroyRenderer :: Ptr SDLRenderer -> IO ()
 
-foreign import ccall "SDL_SetRenderDrawColor" sdlSetRenderDrawColor :: Ptr SDL_Renderer -> Word8 -> Word8 -> Word8 -> Word8 -> IO CBool
-foreign import ccall "SDL_RenderClear" sdlRenderClear :: Ptr SDL_Renderer -> IO CBool
-foreign import ccall "SDL_RenderFillRect" sdlRenderFillRect :: Ptr SDL_Renderer -> Ptr SDL_FRect -> IO CBool
-foreign import ccall "SDL_RenderPresent" sdlRenderPresent :: Ptr SDL_Renderer -> IO CBool
+foreign import ccall "SDL_SetRenderDrawColor" sdlSetRenderDrawColor :: Ptr SDLRenderer -> Word8 -> Word8 -> Word8 -> Word8 -> IO CBool
+foreign import ccall "SDL_RenderClear" sdlRenderClear :: Ptr SDLRenderer -> IO CBool
+foreign import ccall "SDL_RenderFillRect" sdlRenderFillRect :: Ptr SDLRenderer -> Ptr SDLFRect -> IO CBool
+foreign import ccall "SDL_RenderPresent" sdlRenderPresent :: Ptr SDLRenderer -> IO CBool
 
 foreign import ccall "SDL_Delay" sdlDelay :: Word32 -> IO ()
 foreign import ccall "SDL_GetError" sdlGetError :: IO CString
@@ -157,7 +157,7 @@ driverHint drivers =
         <> intercalate ", " names
         <> "\nHint: set SDL_VIDEO_DRIVER=<driver>"
 
-loop :: Ptr SDL_Renderer -> CInt -> CInt -> IORef Bool -> IO ()
+loop :: Ptr SDLRenderer -> CInt -> CInt -> IORef Bool -> IO ()
 loop renderer winW winH sidebarVisible = do
   (quit, toggled) <- pollEvents
   when toggled (modifyIORef' sidebarVisible not)
@@ -222,10 +222,10 @@ buildLayout showSidebar winW winH =
   in withChildren [header, body] root
 
 -- Draw each layout node as a filled rectangle.
-drawLayout :: Ptr SDL_Renderer -> Int -> LayoutNode -> IO ()
+drawLayout :: Ptr SDLRenderer -> Int -> LayoutNode -> IO ()
 drawLayout renderer depth layoutNode = do
   let (x, y, w, h) = layoutBounds layoutNode
-      rect = SDL_FRect (realToFrac x) (realToFrac y) (realToFrac w) (realToFrac h)
+      rect = SDLFRect (realToFrac x) (realToFrac y) (realToFrac w) (realToFrac h)
       (r, g, b, a) = colorFor depth (fromMaybe "" (layoutKey layoutNode))
   _ <- sdlSetRenderDrawColor renderer r g b a
   with rect $ \rectPtr -> do

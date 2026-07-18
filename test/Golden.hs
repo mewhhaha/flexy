@@ -14,7 +14,7 @@ import Flexy.Measure (MeasureInput(..), MeasureMode(..), MeasureOutput(..))
 
 -- Render layout tree as deterministic text.
 renderLayout :: LayoutNode -> String
-renderLayout node = unlines (go 0 node)
+renderLayout layoutNode = unlines (go 0 layoutNode)
   where
     go indent n =
       let (l, t, w, h) = layoutBounds n

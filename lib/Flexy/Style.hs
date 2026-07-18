@@ -39,7 +39,7 @@ module Flexy.Style
   , setPositionLTRB
   ) where
 
-import Flexy.Types
+import Flexy.Types hiding (height, width)
 
 -- | Style properties for a node.
 data Style = Style

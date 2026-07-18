@@ -511,8 +511,7 @@ genRootAndTree = do
 genRootSize :: Gen Size
 genRootSize = do
   w <- genRootDim
-  h <- genRootDim
-  pure (Size w h)
+  Size w <$> genRootDim
 
 genRootDim :: Gen Dimension
 genRootDim =
@@ -651,33 +650,26 @@ genPaddingSetter :: Gen (Style -> Style)
 genPaddingSetter = do
   useAll <- elements [True, False]
   if useAll
-    then do
-      v <- genValueNonNegative
-      pure (setPaddingAll v)
+    then setPaddingAll <$> genValueNonNegative
     else do
       l <- genValueNonNegative
       t <- genValueNonNegative
       r <- genValueNonNegative
-      b <- genValueNonNegative
-      pure (setPaddingLTRB l t r b)
+      setPaddingLTRB l t r <$> genValueNonNegative
 
 genMarginSetter :: Gen (Style -> Style)
 genMarginSetter = do
   choice <- elements [0 :: Int, 1, 2]
   case choice of
-    0 -> do
-      v <- genValueSigned
-      pure (setMarginAll v)
+    0 -> setMarginAll <$> genValueSigned
     1 -> do
       l <- genValueSigned
       t <- genValueSigned
       r <- genValueSigned
-      b <- genValueSigned
-      pure (setMarginLTRB l t r b)
+      setMarginLTRB l t r <$> genValueSigned
     _ -> do
       l <- genValueSigned
-      r <- genValueSigned
-      pure (setMarginLR l r)
+      setMarginLR l <$> genValueSigned
 
 genBorderSetter :: Gen (Style -> Style)
 genBorderSetter = do
@@ -696,8 +688,7 @@ genPositionSetter = do
   l <- genValueSigned
   t <- genValueSigned
   r <- genValueSigned
-  b <- genValueSigned
-  pure (setPositionLTRB l t r b)
+  setPositionLTRB l t r <$> genValueSigned
 
 layoutValues :: LayoutNode -> [Float]
 layoutValues n =
