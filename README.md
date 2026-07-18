@@ -1,129 +1,100 @@
 # Flexy
 
-Flexy is a smol, pure Haskell flexbox layout engine inspired by Yoga. It gives you a tiny, functional API for building layout trees, running the flexbox algorithm, and peeking at computed layouts. uwu
+Flexy is a small, pure Haskell library for flexbox-style layout. It turns an
+immutable tree into rectangles and keeps your application values attached to
+the result.
 
-## Features
+The API follows the shape of the problem:
 
-- Pure Haskell implementation (no FFI, no spooky surprises).
-- Flexbox layout with wrapping, gaps, baseline alignment, and auto margins.
-- Min/max-content sizing, fit-content, aspect-ratio handling, and box-sizing.
-- Measure and baseline callbacks for text or custom nodes.
-- Deterministic layout output (nice for tests).
+- trees compose from `row`, `column`, and leaves;
+- styles compose with `(<>)`;
+- `Functor` changes the values without rebuilding the layout tree;
+- layout is a deterministic, pure function;
+- strict `Float` geometry and a linear flex pass keep the common path cheap.
 
-## Status
+Flexy deliberately is not a CSS engine. It implements the useful flexbox core:
+row and column directions, reverse directions, wrapping, grow and shrink,
+minimum and maximum sizes, alignment, justification, gaps, padding, margins,
+percentages, and intrinsic measurements.
 
-Flexy targets the core flexbox model and several CSS sizing behaviors. It is not a full CSS engine. Overflow is modeled for auto-min sizing only (no clipping/scrolling). Writing modes are supported for axis resolution, but logical properties beyond that are intentionally minimal.
-
-Breaking changes are acceptable while the API stabilizes (sorry!).
-
-### Display
-
-Flexy currently supports two display modes:
-
-- `DisplayFlex` (default): the node participates in flex layout.
-- `DisplayNone`: the node is excluded from layout and produces a zero-sized layout node (children are skipped).
-
-Use `setDisplay DisplayNone` to hide a node while keeping it in the tree.
-
-## Install
-
-Add to your `build-depends` once published:
-
-```cabal
-build-depends:
-    flexy
-```
-
-For local development:
-
-```bash
-cabal build
-```
-
-## Quick start
+## Example
 
 ```haskell
 import Flexy
 
-root :: Node
-root =
-  let childStyle = defaultStyle
-        & setFlexGrow 1
-        & setFlexBasis (DimPoints 0)
-        & setHeight (DimPoints 24)
-      a = node childStyle
-      b = node childStyle
-      rootStyle = defaultStyle
-        & setFlexDirection Row
-        & setAlignItems AlignFlexStart
-  in withChildren [a, b] (node rootStyle)
+screen :: Node String
+screen =
+  styled (padding (allEdges 16) <> gap 12) $
+    column "screen"
+      [ styled (height (Points 48)) (leaf "header")
+      , styled (grow 1 <> gap 12) $
+          row "body"
+            [ styled (width (Points 220)) (leaf "sidebar")
+            , styled (grow 1) (leaf "content")
+            ]
+      ]
 
-layout :: LayoutNode
-layout = computeLayout defaultConfig (Size (DimPoints 200) (DimPoints 40)) root
+screenLayout :: Layout String
+screenLayout = layout (Size 900 600) screen
 ```
 
-Inspect computed bounds:
+Every node has an application-defined value. After layout, each value sits next
+to its absolute bounds:
 
 ```haskell
-let (x, y, w, h) = layoutBounds layout
+draw :: Layout String -> IO ()
+draw box = do
+  drawRectangle (value box) (bounds box)
+  mapM_ draw (children box)
 ```
 
-## API overview
+## Composable styles
 
-The public API is intentionally small and split across a few modules:
-
-- `Flexy` re-exports the public surface for convenient use.
-- `Flexy.Style` defines the `Style` record and setter helpers.
-- `Flexy.Node` builds the layout tree and attaches measurement/baseline callbacks.
-- `Flexy.Layout` runs layout and inspects results.
-- `Flexy.Types` contains the core enums and value types.
-
-### Building nodes
-
-- `node` creates a leaf node from a `Style`.
-- `withChildren` attaches child nodes.
-- `withMeasure` attaches a custom measurement function.
-- `withBaseline` attaches a baseline function.
-- `withKey` adds a string identifier used for tests and inspection.
-
-### Measuring
-
-Provide a `MeasureFunc` for text or custom rendering:
+A `Style` describes only the properties it changes. `mempty` changes nothing,
+and the right-hand value wins when properties overlap:
 
 ```haskell
-measureText :: MeasureFunc
-measureText (MeasureInput w _ h _) =
-  MeasureOutput (max 0 w) (max 0 h) Nothing
+card :: Style
+card = width (Points 240) <> padding (axisEdges 16 12)
+
+selectedCard :: Style
+selectedCard = card <> width (Percent 0.5)
 ```
 
-### Running layout
+`Points` are abstract layout units. Percentages are fractions, so
+`Percent 0.5` means fifty percent. Widths and heights describe a node's outer
+bounds before margin; padding occupies space inside those bounds.
 
-- `computeLayout` calculates a full layout tree.
-- `layoutBounds`, `layoutChildren`, and `layoutKey` help inspect the result.
+The empty style uses a row, no wrapping, start justification, stretch
+alignment, zero growth, shrink factor one, and zero spacing.
 
-## Testing
+## Intrinsic content
+
+Use `sized` for fixed intrinsic content or `measured` for content such as text:
+
+```haskell
+title :: Node String
+title = measured measureText "A title"
+
+measureText :: Constraints -> Size
+measureText constraints =
+  Size (maybe 320 (min 320) (availableWidth constraints)) 24
+```
+
+A style width or height overrides the intrinsic dimension. The engine passes
+the parent content bounds to measurements and sanitizes non-finite or negative
+sizes at the public boundary.
+
+## Development
 
 ```bash
 cabal test
+just demo  # SDL3 example
 ```
 
-The test suite includes golden layout fixtures and property-based tests.
-
-## SDL3 Demo
-
-The SDL3 demo now lives in `examples/sdl3`.
-
-```bash
-just demo
-```
-
-Or run directly:
-
-```bash
-cd examples
-cabal run flexy-sdl3-example
-```
+The package depends only on `base`. Its test suite covers examples and layout
+invariants with QuickCheck.
 
 ## License
 
-MIT. See `LICENSE`.
+MIT. See [LICENSE](LICENSE).

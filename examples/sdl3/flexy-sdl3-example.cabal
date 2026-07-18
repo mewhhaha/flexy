@@ -8,7 +8,7 @@ executable flexy-sdl3-example
     hs-source-dirs:   app
     c-sources:        cbits/flexy_sdl3_shim.c
     build-depends:
-        base ^>=4.21.0.0
+        base ^>=4.22.0.0
         , flexy
     pkgconfig-depends: sdl3
     ghc-options:      -Wall

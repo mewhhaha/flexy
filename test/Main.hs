@@ -1,8 +1,9 @@
-module Main where
+module Main (main) where
 
 import Test.Tasty (defaultMain, testGroup)
-import Golden (goldenTests)
+
+import Examples (exampleTests)
 import Properties (propertyTests)
 
 main :: IO ()
-main = defaultMain (testGroup "flexy-tests" [goldenTests, propertyTests])
+main = defaultMain (testGroup "flexy" [exampleTests, propertyTests])

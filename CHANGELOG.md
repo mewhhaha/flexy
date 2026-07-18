@@ -1,5 +1,13 @@
-# Revision history for flexy
+# Changelog
 
-## 0.1.0.0 -- YYYY-mm-dd
+## Unreleased
 
-* First version. Released on an unsuspecting world.
+- Rebuilt Flexy around immutable, value-carrying `Node` and `Layout` trees.
+- Made `Style` a composable `Monoid` with right-biased property overlays.
+- Replaced the CSS-shaped API with focused row, column, flex, sizing,
+  alignment, spacing, wrapping, and intrinsic-measurement primitives.
+- Replaced the original layout kernel with a strict, dependency-free flex
+  pass supporting proportional grow and shrink with min/max freezing.
+- Reduced the supported public surface to the single `Flexy` module.
+- Updated the SDL3 example to the new API and corrected its SDL3 boolean
+  initialization result.

@@ -1,11 +1,11 @@
 cabal-version:      3.14
 name:               flexy
 version:            0.1.0.0
-synopsis:           Pure Haskell flexbox layout engine
+synopsis:           Small, composable flexbox layouts in pure Haskell
 description:
-    Flexy is a pure Haskell flexbox layout engine inspired by Yoga.
-    It provides a small, functional API for building layout trees,
-    running the flexbox algorithm, and inspecting computed layouts.
+    Flexy turns immutable, application-defined trees into flexbox layouts.
+    Styles compose as values and the focused layout kernel has no dependencies
+    beyond base.
 license:            MIT
 license-file:       LICENSE
 author:             mewhhaha
@@ -17,24 +17,22 @@ extra-doc-files:    CHANGELOG.md
                     README.md
 -- extra-source-files:
 
+source-repository head
+    type:             git
+    location:         https://github.com/mewhhaha/flexy.git
+
 common warnings
-    ghc-options: -Wall
+    ghc-options: -Wall -Wcompat
 
 library
     import:           warnings
     exposed-modules:
         Flexy
-        Flexy.Config
-        Flexy.Layout
-        Flexy.Measure
-        Flexy.Node
-        Flexy.Style
-        Flexy.Types
     other-modules:
-        Flexy.Internal.Compute
-        Flexy.Layout.Types
+        Flexy.Core
+        Flexy.Internal.Layout
     build-depends:
-        base ^>=4.21.0.0
+        base ^>=4.22.0.0
     hs-source-dirs:   lib
     default-language: GHC2024
 
@@ -44,15 +42,12 @@ test-suite flexy-tests
     hs-source-dirs:   test
     main-is:          Main.hs
     other-modules:
-        Golden
+        Examples
         Properties
     build-depends:
-        base ^>=4.21.0.0
+        base ^>=4.22.0.0
         , flexy
         , tasty ^>=1.5
-        , tasty-golden ^>=2.3
         , tasty-quickcheck ^>=0.10
         , QuickCheck ^>=2.15
-        , bytestring ^>=0.12
-        , filepath ^>=1.5
     default-language: GHC2024

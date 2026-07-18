@@ -7,16 +7,15 @@
 --   cabal run flexy-sdl3-example
 --
 -- Controls:
---   D - toggle sidebar visibility (DisplayNone)
+--   D - toggle sidebar visibility
 --   Esc / window close - quit
 
 module Main (main) where
 
 import Control.Monad (forM, forM_, unless, when)
-import Data.Function ((&))
 import Data.IORef (IORef, modifyIORef', newIORef, readIORef)
 import Data.List (intercalate)
-import Data.Maybe (fromMaybe, isNothing)
+import Data.Maybe (isNothing)
 import Foreign
 import Foreign.C.String (CString, peekCString, withCString)
 import Foreign.C.Types (CBool(..), CFloat(..), CInt(..))
@@ -50,7 +49,7 @@ instance Storable SDLFRect where
 
 -- Minimal SDL3 bindings
 
-foreign import ccall "SDL_Init" sdlInit :: Word32 -> IO CInt
+foreign import ccall "SDL_Init" sdlInit :: Word32 -> IO CBool
 foreign import ccall "SDL_Quit" sdlQuit :: IO ()
 
 foreign import ccall "SDL_CreateWindow" sdlCreateWindow :: CString -> CInt -> CInt -> Word32 -> IO (Ptr SDLWindow)
@@ -112,8 +111,8 @@ formatError err =
 
 initSDL :: Word32 -> IO ()
 initSDL flags = do
-  rc <- sdlInit flags
-  if rc == 0
+  initialized <- sdlInit flags
+  if initialized /= 0
     then pure ()
     else do
       err <- sdlErrorString
@@ -125,8 +124,8 @@ initSDL flags = do
           putStrLn "SDL_Init failed; falling back to dummy video driver."
           _ <- setVideoDriverHint "dummy"
           sdlQuit
-          rc2 <- sdlInit flags
-          when (rc2 /= 0) (sdlFailDetailed "SDL_Init" err drivers)
+          initializedWithDummy <- sdlInit flags
+          when (initializedWithDummy == 0) (sdlFailDetailed "SDL_Init" err drivers)
         else sdlFailDetailed "SDL_Init" err drivers
 
 setVideoDriverHint :: String -> IO ()
@@ -163,8 +162,8 @@ loop renderer winW winH sidebarVisible = do
   when toggled (modifyIORef' sidebarVisible not)
 
   showSidebar <- readIORef sidebarVisible
-  let root = buildLayout showSidebar (fromIntegral winW) (fromIntegral winH)
-      layoutRoot = computeLayout defaultConfig (Size (DimPoints (fromIntegral winW)) (DimPoints (fromIntegral winH))) root
+  let root = buildLayout showSidebar
+      layoutRoot = layout (Size (fromIntegral winW) (fromIntegral winH)) root
 
   _ <- sdlSetRenderDrawColor renderer 20 20 25 255
   _ <- sdlRenderClear renderer
@@ -189,49 +188,31 @@ pollEvents = alloca $ \codePtr ->
             go quit' toggled'
   in go False False
 
-buildLayout :: Bool -> Float -> Float -> Node
-buildLayout showSidebar winW winH =
-  let headerStyle = defaultStyle
-        & setHeight (DimPoints 60)
-        & setAlignItems AlignCenter
-      header = withKey "header" (node headerStyle)
-
-      sidebarStyle = defaultStyle
-        & setWidth (DimPoints 220)
-        & setDisplay (if showSidebar then DisplayFlex else DisplayNone)
-      sidebar = withKey "sidebar" (node sidebarStyle)
-
-      contentStyle = defaultStyle
-        & setFlexGrow 1
-        & setGaps 12 12
-      content = withKey "content" (node contentStyle)
-
-      bodyStyle = defaultStyle
-        & setFlexDirection Row
-        & setFlexGrow 1
-        & setGaps 12 12
-      body = withKey "body" (withChildren [sidebar, content] (node bodyStyle))
-
-      rootStyle = defaultStyle
-        & setFlexDirection Column
-        & setWidth (DimPoints winW)
-        & setHeight (DimPoints winH)
-        & setGaps 12 12
-        & setPaddingAll (ValPoints 16)
-      root = withKey "root" (node rootStyle)
-  in withChildren [header, body] root
+buildLayout :: Bool -> Node String
+buildLayout showSidebar =
+  styled (padding (allEdges 16) <> gap 12) $
+    column "root"
+      [ styled (height (Points 60) <> align AlignCenter) (leaf "header")
+      , styled (grow 1 <> gap 12) (row "body" bodyChildren)
+      ]
+  where
+    sidebar = styled (width (Points 220)) (leaf "sidebar")
+    content = styled (grow 1) (leaf "content")
+    bodyChildren
+      | showSidebar = [sidebar, content]
+      | otherwise = [content]
 
 -- Draw each layout node as a filled rectangle.
-drawLayout :: Ptr SDLRenderer -> Int -> LayoutNode -> IO ()
+drawLayout :: Ptr SDLRenderer -> Int -> Layout String -> IO ()
 drawLayout renderer depth layoutNode = do
-  let (x, y, w, h) = layoutBounds layoutNode
+  let Rect x y w h = bounds layoutNode
       rect = SDLFRect (realToFrac x) (realToFrac y) (realToFrac w) (realToFrac h)
-      (r, g, b, a) = colorFor depth (fromMaybe "" (layoutKey layoutNode))
+      (r, g, b, a) = colorFor depth (value layoutNode)
   _ <- sdlSetRenderDrawColor renderer r g b a
   with rect $ \rectPtr -> do
     _ <- sdlRenderFillRect renderer rectPtr
     pure ()
-  forM_ (layoutChildren layoutNode) (drawLayout renderer (depth + 1))
+  forM_ (children layoutNode) (drawLayout renderer (depth + 1))
 
 colorFor :: Int -> String -> (Word8, Word8, Word8, Word8)
 colorFor depth key =

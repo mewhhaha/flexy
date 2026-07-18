@@ -1,128 +1,60 @@
--- | Public API re-exports for building and computing flex layouts.
+-- | A small, pure flexbox layout library.
+--
+-- Styles are values. Combine them with '<>':
+--
+-- @
+-- card = styled (width (Points 240) <> padding (allEdges 16))
+-- @
 module Flexy
-  ( Node
-  , LayoutNode
+  ( -- * Geometry
+    Size(..)
+  , Rect(..)
+  , Constraints(..)
+  , Edges(..)
+  , allEdges
+  , axisEdges
+  , edges
+
+    -- * Styles
   , Style
-  , Layout
-  , Size(..)
-  , Value(..)
-  , Dimension(..)
-  , Align(..)
-  , Justify(..)
-  , FlexDirection(..)
-  , FlexWrap(..)
-  , PositionType(..)
-  , BoxSizing(..)
-  , Overflow(..)
-  , Display(..)
-  , WritingMode(..)
+  , Length(..)
   , Direction(..)
-  , MeasureFunc
-  , BaselineFunc
-  , LayoutConfig(..)
-  , defaultConfig
-  , defaultStyle
-  , node
-  , withChildren
-  , withMeasure
-  , withBaseline
-  , withKey
-  , layoutBounds
-  , layoutChildren
-  , layoutKey
-  , setSize
-  , setWidth
-  , setHeight
-  , setMinWidth
-  , setMinHeight
-  , setMaxWidth
-  , setMaxHeight
-  , setFlexDirection
-  , setFlexWrap
-  , setJustifyContent
-  , setAlignItems
-  , setAlignSelf
-  , setAlignContent
-  , setFlexGrow
-  , setFlexShrink
-  , setFlexBasis
-  , setPositionType
-  , setOrder
-  , setAspectRatio
-  , setBoxSizing
-  , setOverflow
-  , setDisplay
-  , setWritingMode
-  , setFlex
-  , setFlexFlow
-  , setGaps
-  , setDirection
-  , setPaddingAll
-  , setPaddingLTRB
-  , setMarginAll
-  , setMarginLTRB
-  , setMarginLR
-  , setBorderAll
-  , setBorderStartEnd
-  , setPositionLTRB
-  , computeLayout
+  , Wrap(..)
+  , Justify(..)
+  , Align(..)
+  , width
+  , height
+  , minWidth
+  , minHeight
+  , maxWidth
+  , maxHeight
+  , direction
+  , wrapping
+  , justify
+  , align
+  , alignSelf
+  , grow
+  , shrink
+  , basis
+  , flex
+  , gap
+  , padding
+  , margin
+
+    -- * Trees
+  , Measure
+  , Node
+  , leaf
+  , sized
+  , measured
+  , row
+  , column
+  , styled
+
+    -- * Layout
+  , Layout(..)
+  , layout
   ) where
 
-import Flexy.Config (LayoutConfig(..), defaultConfig)
-import Flexy.Layout (Layout, LayoutNode, computeLayout, layoutBounds, layoutChildren, layoutKey)
-import Flexy.Measure (MeasureFunc, BaselineFunc)
-import Flexy.Node (Node, node, withChildren, withMeasure, withBaseline, withKey)
-import Flexy.Style
-  ( Style
-  , defaultStyle
-  , setSize
-  , setWidth
-  , setHeight
-  , setMinWidth
-  , setMinHeight
-  , setMaxWidth
-  , setMaxHeight
-  , setFlexDirection
-  , setFlexWrap
-  , setJustifyContent
-  , setAlignItems
-  , setAlignSelf
-  , setAlignContent
-  , setFlexGrow
-  , setFlexShrink
-  , setFlexBasis
-  , setPositionType
-  , setOrder
-  , setAspectRatio
-  , setBoxSizing
-  , setOverflow
-  , setDisplay
-  , setWritingMode
-  , setFlex
-  , setFlexFlow
-  , setGaps
-  , setDirection
-  , setPaddingAll
-  , setPaddingLTRB
-  , setMarginAll
-  , setMarginLTRB
-  , setMarginLR
-  , setBorderAll
-  , setBorderStartEnd
-  , setPositionLTRB
-  )
-import Flexy.Types
-  ( Size(..)
-  , Value(..)
-  , Dimension(..)
-  , Align(..)
-  , Justify(..)
-  , FlexDirection(..)
-  , FlexWrap(..)
-  , PositionType(..)
-  , BoxSizing(..)
-  , Overflow(..)
-  , Display(..)
-  , WritingMode(..)
-  , Direction(..)
-  )
+import Flexy.Core
+import Flexy.Internal.Layout (layout)
