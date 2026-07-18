@@ -35,3 +35,5 @@
   preventing repeated measurement from exploding on deeply nested trees.
 - Reported the actual SDL error from a failed dummy-driver retry instead of
   reusing stale evidence from the initial video-driver attempt.
+- Set the fallback video-driver hint only after shutting down the failed SDL
+  attempt, guaranteeing that the hint precedes retry initialization.

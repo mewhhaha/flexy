@@ -131,8 +131,8 @@ initSDL flags = do
       if isNothing envDriver && isNothing envDriverCompat && "dummy" `elem` drivers
         then do
           putStrLn "SDL_Init failed; falling back to dummy video driver."
-          setVideoDriverHint "dummy"
           sdlQuit
+          setVideoDriverHint "dummy"
           initializedWithDummy <- sdlInit flags
           when (initializedWithDummy == 0) $ do
             fallbackError <- sdlErrorString
