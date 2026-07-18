@@ -31,3 +31,5 @@
   operation fails instead of continuing after a discarded status.
 - Ensured SDL shutdown also runs when initialization itself raises an
   exception before entering the main resource bracket.
+- Reused intrinsic cross sizes when the assigned main constraint is unchanged,
+  preventing repeated measurement from exploding on deeply nested trees.

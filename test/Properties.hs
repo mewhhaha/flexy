@@ -29,6 +29,7 @@ propertyTests = testGroup "properties"
   , QC.testProperty "style composition is associative" styleCompositionIsAssociative
   , QC.testProperty "empty styles are a composition identity" emptyStyleIsIdentity
   , QC.testProperty "a wide sibling list lays out completely" wideTreeCompletes
+  , QC.testProperty "deep nesting lays out completely" deepTreeCompletes
   ]
 
 growFillsWidth :: Positive Float -> Positive Float -> Positive Float -> QC.Property
@@ -130,6 +131,14 @@ wideTreeCompletes = QC.once (length (children result) QC.=== siblingCount)
   where
     siblingCount = 10000
     result = layout (Size (fromIntegral siblingCount) 1) (row () (replicate siblingCount (sized (Size 1 1) ())))
+
+deepTreeCompletes :: QC.Property
+deepTreeCompletes = QC.once (length (layouts result) QC.=== nestingDepth + 1)
+  where
+    nestingDepth = 100
+    nested 0 = sized (Size 1 1) ()
+    nested depth = styled (align AlignStart) (row () [nested (depth - 1)])
+    result = layout (Size 100 100) (nested nestingDepth)
 
 layouts :: Layout a -> [Layout a]
 layouts tree = tree : concatMap layouts (children tree)

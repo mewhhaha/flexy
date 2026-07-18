@@ -21,6 +21,7 @@ data Prepared a = Prepared
   , preparedShrink :: !Float
   , preparedMargin :: !Edges
   , preparedCrossIsAuto :: !Bool
+  , preparedCrossAtMain :: !(Maybe Float)
   , preparedAlign :: !Align
   }
 
@@ -94,6 +95,7 @@ prepareChild axis constraints parentStyle child =
     , preparedShrink = nonNegative (fromMaybe 1 (styleShrink childStyle))
     , preparedMargin = cleanSignedEdges (fromMaybe (allEdges 0) (styleMargin childStyle))
     , preparedCrossIsAuto = lengthIsAuto crossLength
+    , preparedCrossAtMain = (dimensionFor axis childStyle >>= resolveLength mainLimit) <|> mainLimit
     , preparedAlign = fromMaybe parentAlignment (styleAlignSelf childStyle)
     }
   where
@@ -211,6 +213,7 @@ resolveLine axis constraints direction' availableMain gap' prepared =
 resolveCrossSize :: Axis -> Constraints -> Float -> Prepared a -> Float
 resolveCrossSize axis constraints assignedMain child
   | not (preparedCrossIsAuto child) = preparedCross child
+  | preparedCrossAtMain child == Just assignedMain = preparedCross child
   | otherwise = clampLength (preparedMinCross child) (preparedMaxCross child) intrinsicCross
   where
     node = preparedNode child
@@ -415,6 +418,10 @@ crossConstraintFor Vertical = availableWidth
 crossDimensionFor :: Axis -> Style -> Maybe Length
 crossDimensionFor Horizontal = styleHeight
 crossDimensionFor Vertical = styleWidth
+
+dimensionFor :: Axis -> Style -> Maybe Length
+dimensionFor Horizontal = styleWidth
+dimensionFor Vertical = styleHeight
 
 minimumFor :: Axis -> Style -> Maybe Length
 minimumFor Horizontal = styleMinWidth
