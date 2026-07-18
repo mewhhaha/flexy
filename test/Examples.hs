@@ -16,6 +16,8 @@ exampleTests = testGroup "examples"
   , example "margins offset a child on both axes" marginsOffsetChild
   , example "wrapping starts a new flex line" wrappingStartsLine
   , example "space-evenly includes both outer spaces" spaceEvenly
+  , example "center keeps an oversized child centered" centerPreservesOverflowAlignment
+  , example "end anchors an oversized child to the end" endPreservesOverflowAlignment
   , example "row-reverse positions children from the right" rowReverseGeometry
   , example "column-reverse positions children from the bottom" columnReverseGeometry
   , example "measurements receive the parent content constraint" measurementConstraint
@@ -27,6 +29,7 @@ exampleTests = testGroup "examples"
   , example "intrinsic wrapping uses flex basis for line breaks" wrappingUsesFlexBasis
   , example "nested rows use remeasured intrinsic height" nestedRowRemeasuresHeight
   , example "wrapped measured lines use their assigned widths" wrappedLinesRemeasureHeight
+  , example "overflowing offsets keep rectangle coordinates finite" overflowingOffsetsStayFinite
   , example "nested bounds use absolute coordinates" nestedCoordinates
   , example "functor preserves geometry while changing values" functorPreservesGeometry
   ]
@@ -106,6 +109,20 @@ spaceEvenly =
   where
     box name = styled (width (Points 20) <> height (Points 10)) (leaf name)
     tree = layout (Size 100 10) (styled (justify SpaceEvenly) (row "root" [box "a", box "b"]))
+
+centerPreservesOverflowAlignment :: QC.Property
+centerPreservesOverflowAlignment =
+  childBounds tree QC.=== Just (Rect (-50) (-50) 200 200)
+  where
+    child = styled (width (Points 200) <> height (Points 200) <> shrink 0) (leaf ())
+    tree = layout (Size 100 100) (styled (justify Center <> align AlignCenter) (row () [child]))
+
+endPreservesOverflowAlignment :: QC.Property
+endPreservesOverflowAlignment =
+  childBounds tree QC.=== Just (Rect (-100) (-100) 200 200)
+  where
+    child = styled (width (Points 200) <> height (Points 200) <> shrink 0) (leaf ())
+    tree = layout (Size 100 100) (styled (justify End <> align AlignEnd) (row () [child]))
 
 rowReverseGeometry :: QC.Property
 rowReverseGeometry =
@@ -254,6 +271,19 @@ wrappedLinesRemeasureHeight =
         row "wrapped" [measured measureText "a", measured measureText "b"]
     tree = layout (Size 100 100) (styled (align AlignStart) (row "root" [wrapped]))
 
+overflowingOffsetsStayFinite :: QC.Property
+overflowingOffsetsStayFinite =
+  QC.counterexample ("non-finite rectangles: " <> show rectangles) $
+    QC.property (all hasFiniteCoordinates rectangles)
+  where
+    largestFiniteFloat = encodeFloat 16777215 104
+    child = styled (margin (allEdges largestFiniteFloat)) (leaf ())
+    root = styled (padding (allEdges largestFiniteFloat)) (row () [child])
+    rectangles = map bounds (treeLayouts (layout (Size largestFiniteFloat largestFiniteFloat) root))
+    hasFiniteCoordinates rectangle =
+      all (not . isInfinite) [rectX rectangle, rectY rectangle]
+        && all (not . isNaN) [rectX rectangle, rectY rectangle]
+
 nestedCoordinates :: QC.Property
 nestedCoordinates =
   case children tree of
@@ -282,3 +312,6 @@ onlyChild _ = Nothing
 
 stripValues :: Layout a -> Layout ()
 stripValues = fmap (const ())
+
+treeLayouts :: Layout a -> [Layout a]
+treeLayouts tree = tree : concatMap treeLayouts (children tree)

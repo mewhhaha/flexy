@@ -17,3 +17,7 @@
   cross size, using the same flex bases as final placement.
 - Reused final line resolution during intrinsic container sizing so nested
   measured content reflects child shrink and per-line assigned widths.
+- Sanitized every emitted rectangle so finite-but-extreme spacing cannot
+  overflow child coordinates to non-finite values.
+- Preserved center and end alignment when children intentionally overflow,
+  while distributed spacing continues to fall back safely.

@@ -49,10 +49,12 @@ layout viewport = layoutNode (Rect 0 0 viewportWidth viewportHeight)
 layoutNode :: Rect -> Node a -> Layout a
 layoutNode rectangle node =
   Layout
-    { bounds = rectangle
+    { bounds = sanitizedRectangle
     , value = nodeValue node
-    , children = layoutChildren rectangle node
+    , children = layoutChildren sanitizedRectangle node
     }
+  where
+    sanitizedRectangle = cleanRect rectangle
 
 layoutChildren :: Rect -> Node a -> [Layout a]
 layoutChildren rectangle node
@@ -255,8 +257,8 @@ layoutLine parentRectangle contentSize direction' baseGap parentStyle crossOffse
       sum (map resolvedMain line)
         + sum (map (mainMargins direction' . preparedMargin . resolvedPrepared) line)
         + gapsTotal baseGap (length line)
-    remainingMain = nonNegative (availableMain - occupiedMain)
-    (leading, between) = justifySpacing (fromMaybe Start (styleJustify parentStyle)) baseGap remainingMain (length line)
+    freeMain = availableMain - occupiedMain
+    (leading, between) = justifySpacing (fromMaybe Start (styleJustify parentStyle)) baseGap freeMain (length line)
     (_, layouts) = mapAccumL positionChild leading line
 
     positionChild cursor resolvedChild =
@@ -278,7 +280,7 @@ layoutLine parentRectangle contentSize direction' baseGap parentStyle crossOffse
           | preparedAlign child == Stretch && preparedCrossIsAuto child =
               clampLength (preparedMinCross child) (preparedMaxCross child) availableCross
           | otherwise = resolvedCross resolvedChild
-        crossFree = nonNegative (availableCross - childCross)
+        crossFree = availableCross - childCross
         childCrossOffset = crossOffset + crossBefore + alignOffset (preparedAlign child) crossFree
         contentOriginX = rectX parentRectangle + edgeLeft parentPadding
         contentOriginY = rectY parentRectangle + edgeTop parentPadding
@@ -349,18 +351,20 @@ justifySpacing justification baseGap freeSpace count =
     Center -> (freeSpace / 2, baseGap)
     End -> (freeSpace, baseGap)
     SpaceBetween
-      | count > 1 -> (0, baseGap + freeSpace / fromIntegral (count - 1))
+      | count > 1 -> (0, baseGap + distributableSpace / fromIntegral (count - 1))
       | otherwise -> (0, baseGap)
     SpaceAround
       | count > 0 ->
-          let distributed = freeSpace / fromIntegral count
+          let distributed = distributableSpace / fromIntegral count
           in (distributed / 2, baseGap + distributed)
       | otherwise -> (0, baseGap)
     SpaceEvenly
       | count > 0 ->
-          let distributed = freeSpace / fromIntegral (count + 1)
+          let distributed = distributableSpace / fromIntegral (count + 1)
           in (distributed, baseGap + distributed)
       | otherwise -> (0, baseGap)
+  where
+    distributableSpace = nonNegative freeSpace
 
 alignOffset :: Align -> Float -> Float
 alignOffset alignment freeSpace =
@@ -480,6 +484,14 @@ subtractEdgeSpace available edgeSpace = nonNegative . subtract edgeSpace <$> ava
 
 cleanSize :: Size -> Size
 cleanSize measuredSize = Size (nonNegative (sizeWidth measuredSize)) (nonNegative (sizeHeight measuredSize))
+
+cleanRect :: Rect -> Rect
+cleanRect rectangle =
+  Rect
+    (finiteOrZero (rectX rectangle))
+    (finiteOrZero (rectY rectangle))
+    (nonNegative (rectWidth rectangle))
+    (nonNegative (rectHeight rectangle))
 
 cleanBoxEdges :: Edges -> Edges
 cleanBoxEdges values =
