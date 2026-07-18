@@ -33,3 +33,5 @@
   exception before entering the main resource bracket.
 - Reused intrinsic cross sizes when the assigned main constraint is unchanged,
   preventing repeated measurement from exploding on deeply nested trees.
+- Reported the actual SDL error from a failed dummy-driver retry instead of
+  reusing stale evidence from the initial video-driver attempt.

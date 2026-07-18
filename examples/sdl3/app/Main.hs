@@ -134,7 +134,9 @@ initSDL flags = do
           setVideoDriverHint "dummy"
           sdlQuit
           initializedWithDummy <- sdlInit flags
-          when (initializedWithDummy == 0) (sdlFailDetailed "SDL_Init" err drivers)
+          when (initializedWithDummy == 0) $ do
+            fallbackError <- sdlErrorString
+            sdlFailDetailed "SDL_Init with dummy video driver" fallbackError drivers
         else sdlFailDetailed "SDL_Init" err drivers
 
 setVideoDriverHint :: String -> IO ()
