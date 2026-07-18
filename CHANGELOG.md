@@ -27,3 +27,5 @@
   bases shrink proportionally without overflowing or losing the target size.
 - Made the SDL3 example release SDL, window, and renderer resources when an
   exception interrupts initialization or rendering.
+- Made the SDL3 example stop with SDL's error evidence when a hint or rendering
+  operation fails instead of continuing after a discarded status.

@@ -102,6 +102,11 @@ sdlFail label = do
   err <- sdlErrorString
   fail (label <> " failed: " <> formatError err)
 
+requireSDL :: String -> IO CBool -> IO ()
+requireSDL label operation = do
+  succeeded <- operation
+  when (succeeded == 0) (sdlFail label)
+
 sdlErrorString :: IO String
 sdlErrorString = do
   errPtr <- sdlGetError
@@ -126,7 +131,7 @@ initSDL flags = do
       if isNothing envDriver && isNothing envDriverCompat && "dummy" `elem` drivers
         then do
           putStrLn "SDL_Init failed; falling back to dummy video driver."
-          _ <- setVideoDriverHint "dummy"
+          setVideoDriverHint "dummy"
           sdlQuit
           initializedWithDummy <- sdlInit flags
           when (initializedWithDummy == 0) (sdlFailDetailed "SDL_Init" err drivers)
@@ -135,9 +140,8 @@ initSDL flags = do
 setVideoDriverHint :: String -> IO ()
 setVideoDriverHint driver =
   withCString "SDL_VIDEO_DRIVER" $ \name ->
-    withCString driver $ \value -> do
-      _ <- sdlSetHint name value
-      pure ()
+    withCString driver $ \value ->
+      requireSDL "SDL_SetHint" (sdlSetHint name value)
 
 getVideoDrivers :: IO [String]
 getVideoDrivers = do
@@ -169,12 +173,12 @@ loop renderer winW winH sidebarVisible = do
   let root = buildLayout showSidebar
       layoutRoot = layout (Size (fromIntegral winW) (fromIntegral winH)) root
 
-  _ <- sdlSetRenderDrawColor renderer 20 20 25 255
-  _ <- sdlRenderClear renderer
+  requireSDL "SDL_SetRenderDrawColor" (sdlSetRenderDrawColor renderer 20 20 25 255)
+  requireSDL "SDL_RenderClear" (sdlRenderClear renderer)
 
   drawLayout renderer 0 layoutRoot
 
-  _ <- sdlRenderPresent renderer
+  requireSDL "SDL_RenderPresent" (sdlRenderPresent renderer)
 
   sdlDelay 16
   unless quit (loop renderer winW winH sidebarVisible)
@@ -212,10 +216,9 @@ drawLayout renderer depth layoutNode = do
   let Rect x y w h = bounds layoutNode
       rect = SDLFRect (realToFrac x) (realToFrac y) (realToFrac w) (realToFrac h)
       (r, g, b, a) = colorFor depth (value layoutNode)
-  _ <- sdlSetRenderDrawColor renderer r g b a
-  with rect $ \rectPtr -> do
-    _ <- sdlRenderFillRect renderer rectPtr
-    pure ()
+  requireSDL "SDL_SetRenderDrawColor" (sdlSetRenderDrawColor renderer r g b a)
+  with rect $ \rectPtr ->
+    requireSDL "SDL_RenderFillRect" (sdlRenderFillRect renderer rectPtr)
   forM_ (children layoutNode) (drawLayout renderer (depth + 1))
 
 colorFor :: Int -> String -> (Word8, Word8, Word8, Word8)
