@@ -9,7 +9,10 @@ exampleTests :: TestTree
 exampleTests = testGroup "examples"
   [ example "styles compose from left to right" stylesCompose
   , example "grow divides remaining space by factor" growDividesSpace
+  , example "grow distributes free space below one ten-thousandth" tinyGrowFillsWidth
+  , example "huge grow factors preserve their ratio" hugeGrowFactorsPreserveRatio
   , example "shrink divides overflow by weighted basis" shrinkDividesOverflow
+  , example "huge shrink factors preserve their ratio" hugeShrinkFactorsPreserveRatio
   , example "minimum sizes freeze before remaining space is divided" minimumFreezes
   , example "maximum sizes freeze before remaining space is divided" maximumFreezes
   , example "padding, gaps, and alignment position a column" columnGeometry
@@ -52,6 +55,20 @@ growDividesSpace =
     second = styled (flex 3 1 (Points 0)) (leaf "second")
     tree = layout (Size 300 20) (row "root" [first, second])
 
+tinyGrowFillsWidth :: QC.Property
+tinyGrowFillsWidth =
+  childBounds tree QC.=== Just (Rect 0 0 0.00005 1)
+  where
+    child = styled (grow 1 <> basis (Points 0)) (leaf ())
+    tree = layout (Size 0.00005 1) (row () [child])
+
+hugeGrowFactorsPreserveRatio :: QC.Property
+hugeGrowFactorsPreserveRatio =
+  map (rectWidth . bounds) (children tree) QC.=== [50, 50]
+  where
+    child = styled (grow largestFiniteFloat <> basis (Points 0)) (leaf ())
+    tree = layout (Size 100 1) (row () [child, child])
+
 shrinkDividesOverflow :: QC.Property
 shrinkDividesOverflow =
   map bounds (children tree) QC.=== [Rect 0 0 60 20, Rect 60 0 40 20]
@@ -59,6 +76,13 @@ shrinkDividesOverflow =
     first = styled (width (Points 120) <> height (Points 20)) (leaf "first")
     second = styled (width (Points 80) <> height (Points 20)) (leaf "second")
     tree = layout (Size 100 20) (row "root" [first, second])
+
+hugeShrinkFactorsPreserveRatio :: QC.Property
+hugeShrinkFactorsPreserveRatio =
+  map (rectWidth . bounds) (children tree) QC.=== [50, 50]
+  where
+    child = styled (width (Points 100) <> shrink largestFiniteFloat) (leaf ())
+    tree = layout (Size 100 1) (row () [child, child])
 
 minimumFreezes :: QC.Property
 minimumFreezes =
@@ -276,7 +300,6 @@ overflowingOffsetsStayFinite =
   QC.counterexample ("non-finite rectangles: " <> show rectangles) $
     QC.property (all hasFiniteCoordinates rectangles)
   where
-    largestFiniteFloat = encodeFloat 16777215 104
     child = styled (margin (allEdges largestFiniteFloat)) (leaf ())
     root = styled (padding (allEdges largestFiniteFloat)) (row () [child])
     rectangles = map bounds (treeLayouts (layout (Size largestFiniteFloat largestFiniteFloat) root))
@@ -315,3 +338,6 @@ stripValues = fmap (const ())
 
 treeLayouts :: Layout a -> [Layout a]
 treeLayouts tree = tree : concatMap treeLayouts (children tree)
+
+largestFiniteFloat :: Float
+largestFiniteFloat = encodeFloat 16777215 104

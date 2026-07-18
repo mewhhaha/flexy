@@ -29,7 +29,7 @@ data Allocation = Allocation
   , allocationSize :: !Float
   , allocationMinimum :: !Float
   , allocationMaximum :: !(Maybe Float)
-  , allocationFactor :: !Float
+  , allocationFactor :: !Double
   , allocationFrozen :: !Bool
   }
 
@@ -314,13 +314,12 @@ distributeMain direction' availableMain gap' children' = map allocationSize (set
         , allocationMaximum = preparedMaxMain child
         , allocationFactor =
             if growing
-              then preparedGrow child
-              else preparedShrink child * preparedBaseMain child
+              then realToFrac (preparedGrow child)
+              else realToFrac (preparedShrink child) * realToFrac (preparedBaseMain child)
         , allocationFrozen = False
         }
 
     settle current
-      | abs freeSpace < 0.0001 = current
       | totalFactor <= 0 = current
       | newlyFrozen current proposed = settle proposed
       | otherwise = proposed
@@ -336,10 +335,14 @@ distributeMain direction' availableMain gap' children' = map allocationSize (set
           | otherwise =
               allocation
                 { allocationSize = clamped
-                , allocationFrozen = abs (clamped - candidate) > 0.0001
+                , allocationFrozen = clamped /= candidate
                 }
           where
-            candidate = allocationBase allocation + freeSpace * allocationFactor allocation / totalFactor
+            candidate =
+              realToFrac
+                ( realToFrac (allocationBase allocation)
+                    + realToFrac freeSpace * allocationFactor allocation / totalFactor
+                )
             clamped = clampLength (allocationMinimum allocation) (allocationMaximum allocation) candidate
         newlyFrozen before after = or (zipWith becameFrozen before after)
         becameFrozen old new = not (allocationFrozen old) && allocationFrozen new

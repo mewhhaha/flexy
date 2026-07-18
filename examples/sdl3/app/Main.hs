@@ -12,6 +12,7 @@
 
 module Main (main) where
 
+import Control.Exception (bracket, bracket_)
 import Control.Monad (forM, forM_, unless, when)
 import Data.IORef (IORef, modifyIORef', newIORef, readIORef)
 import Data.List (intercalate)
@@ -75,23 +76,26 @@ foreign import ccall "flexy_sdl_poll_event" sdlPollEvent :: Ptr CInt -> IO CInt
 main :: IO ()
 main = do
   flags <- sdlInitVideoFlag
-  initSDL flags
+  bracket_ (initSDL flags) sdlQuit $ do
+    let winW = 900
+        winH = 600
 
-  let winW = 900
-      winH = 600
-
-  window <- withCString "Flexy + SDL3" $ \title -> sdlCreateWindow title winW winH 0
-  when (window == nullPtr) (sdlFail "SDL_CreateWindow")
-
-  renderer <- sdlCreateRenderer window nullPtr
-  when (renderer == nullPtr) (sdlFail "SDL_CreateRenderer")
-
-  sidebarVisible <- newIORef True
-  loop renderer winW winH sidebarVisible
-
-  sdlDestroyRenderer renderer
-  sdlDestroyWindow window
-  sdlQuit
+    bracket
+      (withCString "Flexy + SDL3" $ \title -> do
+        window <- sdlCreateWindow title winW winH 0
+        when (window == nullPtr) (sdlFail "SDL_CreateWindow")
+        pure window)
+      sdlDestroyWindow
+      $ \window ->
+        bracket
+          (do
+            renderer <- sdlCreateRenderer window nullPtr
+            when (renderer == nullPtr) (sdlFail "SDL_CreateRenderer")
+            pure renderer)
+          sdlDestroyRenderer
+          $ \renderer -> do
+            sidebarVisible <- newIORef True
+            loop renderer winW winH sidebarVisible
 
 sdlFail :: String -> IO a
 sdlFail label = do

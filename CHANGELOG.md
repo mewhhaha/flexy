@@ -21,3 +21,7 @@
   overflow child coordinates to non-finite values.
 - Preserved center and end alignment when children intentionally overflow,
   while distributed spacing continues to fall back safely.
+- Made flex allocation scale-independent and computed weight ratios in wider
+  intermediates so small layouts and large finite factors remain accurate.
+- Made the SDL3 example release SDL, window, and renderer resources when an
+  exception interrupts initialization or rendering.
